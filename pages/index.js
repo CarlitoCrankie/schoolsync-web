@@ -1,3 +1,4 @@
+// pages/index.js - Restored with proper ParentDashboard
 import { useState, useEffect } from 'react'
 import LoginScreen from '../components/LoginScreen'
 import ParentDashboard from '../components/ParentDashboard'

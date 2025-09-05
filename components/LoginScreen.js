@@ -303,12 +303,28 @@ export default function LoginScreen({ onLogin }) {
             </div>
 
             {message && (
-              <>
+            <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Password
+                </label>
+                <input 
+                    type="password" 
+                    name="new_password"
+                    value={passwordSetup.new_password}
+                    onChange={handlePasswordSetupChange}
+                    className="input-field"
+                    placeholder="Enter new password (6+ characters)"
+                    disabled={loading}
+                    minLength="6"
+                />
+                </div>
+
+                <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password
-                  </label>
-                  <input 
+                </label>
+                <input 
                     type="password" 
                     name="confirm_password"
                     value={passwordSetup.confirm_password}
@@ -317,17 +333,17 @@ export default function LoginScreen({ onLogin }) {
                     placeholder="Confirm your password"
                     disabled={loading}
                     minLength="6"
-                  />
+                />
                 </div>
 
                 <button 
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+                type="submit"
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
                 >
-                  {loading ? 'Setting Password...' : 'Set Password'}
+                {loading ? 'Setting Password...' : 'Set Password'}
                 </button>
-              </>
+            </>
             )}
           </form>
         )}
