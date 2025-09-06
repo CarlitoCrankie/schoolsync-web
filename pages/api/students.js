@@ -1,6 +1,6 @@
 // pages/api/students.js - Students CRUD API
 const { getPool, sql } = require('../../lib/database')
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcryptjs')
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
