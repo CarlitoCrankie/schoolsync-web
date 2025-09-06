@@ -538,6 +538,7 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
   const [systemCheckResult, setSystemCheckResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [syncAgentStatus, setSyncAgentStatus] = useState(null)
   
   // Simple school form
   const [schoolForm, setSchoolForm] = useState({
@@ -546,6 +547,15 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
     machineId: '',
     status: 'active'
   })
+
+   useEffect(() => {
+    if (!isCompanyAdmin) {
+      fetchSyncAgentStatus()
+      // Refresh sync status every 30 seconds
+      const interval = setInterval(fetchSyncAgentStatus, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [isCompanyAdmin, user])
   
   // // Enhanced school form with admin credentials
   // const [newSchool, setNewSchool] = useState({
@@ -560,6 +570,80 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
   // const [createdSchoolCredentials, setCreatedSchoolCredentials] = useState(null)
   // const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   // const [showAddModal, setShowAddModal] = useState(false)
+
+    const fetchSyncAgentStatus = async () => {
+    try {
+      const schoolId = user.SchoolID || user.school_id || 2
+      const response = await fetch(`/api/sync-status?school_id=${schoolId}`)
+      const data = await response.json()
+      setSyncAgentStatus(data)
+    } catch (error) {
+      console.error('Error fetching sync agent status:', error)
+      setSyncAgentStatus({ 
+        overallHealth: 'error', 
+        error: 'Failed to check sync agent status' 
+      })
+    }
+  }
+
+    const getSyncAgentDisplayInfo = () => {
+    if (!syncAgentStatus) {
+      return {
+        status: 'Unknown',
+        description: 'Loading sync agent status...',
+        color: 'bg-gray-50',
+        dotColor: 'bg-gray-500'
+      }
+    }
+
+    const health = syncAgentStatus.overallHealth
+    const syncAgent = syncAgentStatus.syncAgent
+
+    switch (health) {
+      case 'healthy':
+        return {
+          status: 'Online',
+          description: `Active - Last seen ${syncAgent?.minutes_since_last_seen || 0} min ago`,
+          color: 'bg-green-50',
+          dotColor: 'bg-green-500'
+        }
+      case 'idle':
+        return {
+          status: 'Idle',
+          description: 'Connected but no recent activity',
+          color: 'bg-blue-50',
+          dotColor: 'bg-blue-500'
+        }
+      case 'stale':
+        return {
+          status: 'Warning',
+          description: 'No recent heartbeat - may need restart',
+          color: 'bg-yellow-50',
+          dotColor: 'bg-yellow-500'
+        }
+      case 'offline':
+        return {
+          status: 'Offline',
+          description: 'Sync agent not responding',
+          color: 'bg-red-50',
+          dotColor: 'bg-red-500'
+        }
+      case 'error':
+        return {
+          status: 'Error',
+          description: syncAgentStatus.error || 'Unable to determine status',
+          color: 'bg-red-50',
+          dotColor: 'bg-red-500'
+        }
+      default:
+        return {
+          status: 'Unknown',
+          description: 'Status unknown - check monitoring',
+          color: 'bg-gray-50',
+          dotColor: 'bg-gray-500'
+        }
+    }
+  }
 
   const handleAddNewSchool = () => {
     setShowAddModal(true)
@@ -820,7 +904,9 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
     )
   }
   
-  // School admin dashboard (existing functionality)
+   // Updated school admin dashboard with live sync status
+  const syncDisplayInfo = getSyncAgentDisplayInfo()
+  
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
@@ -847,7 +933,17 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
       </div>
 
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">System Status</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">System Status</h3>
+          <button 
+            onClick={fetchSyncAgentStatus}
+            className="text-xs text-blue-600 hover:text-blue-800"
+            disabled={loading}
+          >
+            {loading ? 'Checking...' : 'Refresh Status'}
+          </button>
+        </div>
+        
         <div className="space-y-3">
           <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
             <div>
@@ -857,12 +953,21 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
             <span className="w-3 h-3 bg-green-500 rounded-full"></span>
           </div>
           
-          <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
+          <div className={`flex justify-between items-center p-3 rounded-lg ${syncDisplayInfo.color}`}>
             <div>
-              <p className="font-medium text-yellow-900">Sync Agent</p>
-              <p className="text-sm text-yellow-600">Status unknown - check monitoring</p>
+              <p className="font-medium text-gray-900">Sync Agent</p>
+              <p className="text-sm text-gray-600">{syncDisplayInfo.description}</p>
+              {syncAgentStatus?.syncAgent && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Synced: {syncAgentStatus.syncAgent.total_synced || 0} | 
+                  Errors: {syncAgentStatus.syncAgent.total_errors || 0}
+                  {syncAgentStatus.syncAgent.uptime_hours > 0 && (
+                    <> | Uptime: {Math.round(syncAgentStatus.syncAgent.uptime_hours)}h</>
+                  )}
+                </div>
+              )}
             </div>
-            <span className="w-3 h-3 bg-yellow-500 rounded-full"></span>
+            <span className={`w-3 h-3 rounded-full ${syncDisplayInfo.dotColor}`}></span>
           </div>
           
           <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
@@ -872,6 +977,21 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user }) {
             </div>
             <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
           </div>
+
+          {/* Show recent sync activity if available */}
+          {syncAgentStatus?.recentActivity?.recent_records?.length > 0 && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="font-medium text-gray-900 text-sm mb-2">Recent Sync Activity</p>
+              <div className="space-y-1">
+                {syncAgentStatus.recentActivity.recent_records.slice(0, 3).map((record, index) => (
+                  <div key={index} className="text-xs text-gray-600 flex justify-between">
+                    <span>{record.student_name}</span>
+                    <span>{new Date(record.created_at).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
