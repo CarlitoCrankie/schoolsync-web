@@ -1283,7 +1283,30 @@ export default async function handler(req, res) {
         result = await getTrendAnalytics(school_id, date_from, date_to)
         break
       case 'real-time':
-        result = await getRealTimeAnalytics(school_id)
+        if (req.method === 'GET') {
+          const { school_id, company_id, date_from, date_to } = req.query
+          
+          try {
+            if (company_id) {
+              // Company admin - get all schools
+              result = await getRealTimeAttendance(null, date_from, date_to)
+            } else if (school_id) {
+              // School admin - get specific school
+              result = await getRealTimeAttendance(school_id, date_from, date_to)
+            } else {
+              // If no filters, get recent activity (last 24 hours)
+              result = await getRealTimeAttendance(null, date_from, date_to)
+            }
+          } catch (error) {
+            console.error('Real-time attendance error:', error)
+            return res.status(500).json({ 
+              success: false, 
+              error: error.message 
+            })
+          }
+        } else {
+          return res.status(405).json({ error: 'Method not allowed for real-time endpoint' })
+        }
         break
       default:
         return res.status(400).json({ 
@@ -1426,9 +1449,88 @@ async function getOverviewAnalytics(schoolId) {
 }
 
 // Real-time Analytics
-async function getRealTimeAnalytics(schoolId) {
+// async function getRealTimeAnalytics(schoolId) {
+//   const pool = await getPool()
+//   const request = pool.request()
+  
+//   let schoolFilter = ''
+//   if (schoolId) {
+//     schoolFilter = 'AND s.SchoolID = @schoolId'
+//     request.input('schoolId', sql.Int, parseInt(schoolId))
+//   }
+
+//   try {
+//     // Current activity (last 2 hours)
+//     const activityResult = await request.query(`
+//       SELECT TOP 50
+//         a.AttendanceID,
+//         a.StudentID,
+//         st.Name as StudentName,
+//         s.SchoolID,
+//         s.Name as SchoolName,
+//         a.ScanTime,
+//         a.Status,
+//         a.CreatedAt,
+//         DATEDIFF(SECOND, a.CreatedAt, GETDATE()) as SecondsAgo
+//       FROM dbo.Attendance a
+//       JOIN Students st ON a.StudentID = st.StudentID
+//       JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE a.CreatedAt > DATEADD(HOUR, -2, GETDATE()) ${schoolFilter}
+//       ORDER BY a.CreatedAt DESC
+//     `)
+
+//     // Live metrics
+//     const metricsResult = await request.query(`
+//       SELECT 
+//         COUNT(CASE WHEN a.CreatedAt > DATEADD(MINUTE, -1, GETDATE()) THEN 1 END) as LastMinute,
+//         COUNT(CASE WHEN a.CreatedAt > DATEADD(MINUTE, -5, GETDATE()) THEN 1 END) as Last5Minutes,
+//         COUNT(CASE WHEN a.CreatedAt > DATEADD(MINUTE, -15, GETDATE()) THEN 1 END) as Last15Minutes,
+//         COUNT(CASE WHEN a.CreatedAt > DATEADD(HOUR, -1, GETDATE()) THEN 1 END) as LastHour,
+//         COUNT(DISTINCT CASE WHEN a.CreatedAt > DATEADD(MINUTE, -15, GETDATE()) THEN a.StudentID END) as ActiveStudents15Min
+//       FROM dbo.Attendance a
+//       JOIN Students st ON a.StudentID = st.StudentID
+//       JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE a.CreatedAt > DATEADD(HOUR, -1, GETDATE()) ${schoolFilter}
+//     `)
+
+//     const metrics = metricsResult.recordset[0]
+
+//     return {
+//       current_activity: activityResult.recordset.map(row => ({
+//         attendance_id: row.AttendanceID,
+//         student_id: row.StudentID,
+//         student_name: row.StudentName,
+//         school_id: row.SchoolID,
+//         school_name: row.SchoolName,
+//         scan_time: row.ScanTime,
+//         status: row.Status,
+//         created_at: row.CreatedAt,
+//         seconds_ago: row.SecondsAgo,
+//         is_recent: row.SecondsAgo < 300 // Less than 5 minutes ago
+//       })),
+//       live_metrics: {
+//         last_minute: metrics.LastMinute || 0,
+//         last_5_minutes: metrics.Last5Minutes || 0,
+//         last_15_minutes: metrics.Last15Minutes || 0,
+//         last_hour: metrics.LastHour || 0,
+//         active_students_15min: metrics.ActiveStudents15Min || 0
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error in getRealTimeAnalytics:', error)
+//     throw error
+//   }
+// }
+async function getRealTimeAnalytics(schoolId, dateFrom, dateTo) {
   const pool = await getPool()
   const request = pool.request()
+  
+  // Use provided dates or default to last 2 hours
+  const endDate = dateTo ? new Date(dateTo + 'T23:59:59') : new Date()
+  const startDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date(Date.now() - 2 * 60 * 60 * 1000)
+  
+  request.input('startDate', sql.DateTime2, startDate)
+  request.input('endDate', sql.DateTime2, endDate)
   
   let schoolFilter = ''
   if (schoolId) {
@@ -1437,7 +1539,7 @@ async function getRealTimeAnalytics(schoolId) {
   }
 
   try {
-    // Current activity (last 2 hours)
+    // Current activity for the specified date range
     const activityResult = await request.query(`
       SELECT TOP 50
         a.AttendanceID,
@@ -1452,11 +1554,11 @@ async function getRealTimeAnalytics(schoolId) {
       FROM dbo.Attendance a
       JOIN Students st ON a.StudentID = st.StudentID
       JOIN Schools s ON st.SchoolID = s.SchoolID
-      WHERE a.CreatedAt > DATEADD(HOUR, -2, GETDATE()) ${schoolFilter}
-      ORDER BY a.CreatedAt DESC
+      WHERE a.ScanTime BETWEEN @startDate AND @endDate ${schoolFilter}
+      ORDER BY a.ScanTime DESC
     `)
 
-    // Live metrics
+    // Live metrics (keep as last hour for real-time feel)
     const metricsResult = await request.query(`
       SELECT 
         COUNT(CASE WHEN a.CreatedAt > DATEADD(MINUTE, -1, GETDATE()) THEN 1 END) as LastMinute,
@@ -1483,7 +1585,7 @@ async function getRealTimeAnalytics(schoolId) {
         status: row.Status,
         created_at: row.CreatedAt,
         seconds_ago: row.SecondsAgo,
-        is_recent: row.SecondsAgo < 300 // Less than 5 minutes ago
+        is_recent: row.SecondsAgo < 300
       })),
       live_metrics: {
         last_minute: metrics.LastMinute || 0,
@@ -1559,6 +1661,211 @@ async function getAttendanceAnalytics(schoolId, dateFrom, dateTo, granularity) {
     }
   } catch (error) {
     console.error('Error in getAttendanceAnalytics:', error)
+    throw error
+  }
+}
+
+// Add this function to your analytics.js file
+// async function getRealTimeAttendance(schoolId, dateFrom, dateTo) {
+//   const pool = await getPool()
+//   const request = pool.request()
+  
+//   const endDate = dateTo ? new Date(dateTo + 'T23:59:59') : new Date()
+//   const startDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  
+//   request.input('startDate', sql.DateTime2, startDate)
+//   request.input('endDate', sql.DateTime2, endDate)
+  
+//   let schoolFilter = ''
+//   if (schoolId) {
+//     schoolFilter = 'AND a.SchoolID = @schoolId'
+//     request.input('schoolId', sql.Int, parseInt(schoolId))
+//   }
+
+//   try {
+//     const attendanceResult = await request.query(`
+//       SELECT TOP 100
+//         a.AttendanceID as attendance_id,
+//         a.StudentID as student_id,
+//         s.Name as student_name,
+//         a.ScanTime as scan_time,
+//         a.Status as status,
+//         a.CreatedAt as created_at,
+//         sch.Name as school_name
+//       FROM dbo.Attendance a
+//       LEFT JOIN Students s ON a.StudentID = s.StudentID
+//       LEFT JOIN Schools sch ON a.SchoolID = sch.SchoolID
+//       WHERE a.ScanTime BETWEEN @startDate AND @endDate
+//       ${schoolFilter}
+//       ORDER BY a.ScanTime DESC
+//     `)
+
+//     return {
+//       current_activity: attendanceResult.recordset.map(record => ({
+//         attendance_id: record.attendance_id,
+//         student_id: record.student_id,
+//         student_name: record.student_name,
+//         scan_time: record.scan_time,
+//         status: record.status,
+//         created_at: record.created_at,
+//         school_name: record.school_name
+//       })),
+//       total_records: attendanceResult.recordset.length,
+//       date_range: {
+//         from: startDate.toISOString(),
+//         to: endDate.toISOString()
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error in getRealTimeAttendance:', error)
+//     throw error
+//   }
+// }
+// Add this function to your analytics.js file
+// async function getRealTimeAttendance(schoolId, dateFrom, dateTo) {
+//   const pool = await getPool()
+//   const request = pool.request()
+  
+//   const endDate = dateTo ? new Date(dateTo + 'T23:59:59') : new Date()
+//   const startDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  
+//   request.input('startDate', sql.DateTime2, startDate)
+//   request.input('endDate', sql.DateTime2, endDate)
+  
+//   let schoolFilter = ''
+//   if (schoolId) {
+//     schoolFilter = 'AND a.SchoolID = @schoolId'
+//     request.input('schoolId', sql.Int, parseInt(schoolId))
+//   }
+
+//   try {
+//     const attendanceResult = await request.query(`
+//       SELECT TOP 100
+//         a.AttendanceID as attendance_id,
+//         a.StudentID as student_id,
+//         s.Name as student_name,
+//         a.ScanTime as scan_time,
+//         a.Status as status,
+//         a.CreatedAt as created_at,
+//         sch.Name as school_name
+//       FROM dbo.Attendance a
+//       LEFT JOIN Students s ON a.StudentID = s.StudentID
+//       LEFT JOIN Schools sch ON a.SchoolID = sch.SchoolID
+//       WHERE a.ScanTime BETWEEN @startDate AND @endDate
+//       ${schoolFilter}
+//       ORDER BY a.ScanTime DESC
+//     `)
+
+//     return {
+//       current_activity: attendanceResult.recordset.map(record => ({
+//         attendance_id: record.attendance_id,
+//         student_id: record.student_id,
+//         student_name: record.student_name,
+//         scan_time: record.scan_time,
+//         status: record.status,
+//         created_at: record.created_at,
+//         school_name: record.school_name
+//       })),
+//       total_records: attendanceResult.recordset.length
+//     }
+//   } catch (error) {
+//     console.error('Error in getRealTimeAttendance:', error)
+//     throw error
+//   }
+// }
+async function getRealTimeAttendance(schoolId, dateFrom, dateTo) {
+  const pool = await getPool()
+  const request = pool.request()
+  
+  // Handle date range properly
+  let dateFilter = ''
+  if (dateFrom && dateTo) {
+    // Convert to proper SQL datetime format
+    const startDateTime = dateFrom + 'T00:00:00.000Z'
+    const endDateTime = dateTo + 'T23:59:59.999Z'
+    
+    request.input('startDate', sql.DateTime2, new Date(startDateTime))
+    request.input('endDate', sql.DateTime2, new Date(endDateTime))
+    dateFilter = 'AND a.ScanTime BETWEEN @startDate AND @endDate'
+  } else {
+    // Default to last 24 hours if no date range provided
+    const defaultStart = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    request.input('defaultStart', sql.DateTime2, defaultStart)
+    dateFilter = 'AND a.ScanTime >= @defaultStart'
+  }
+  
+  let schoolFilter = ''
+  if (schoolId) {
+    schoolFilter = 'AND st.SchoolID = @schoolId'
+    request.input('schoolId', sql.Int, parseInt(schoolId))
+  }
+
+  try {
+    // Get attendance records with proper joins and sorting
+    const attendanceResult = await request.query(`
+      SELECT TOP 100
+        a.AttendanceID as attendance_id,
+        a.StudentID as student_id,
+        st.Name as student_name,
+        a.ScanTime as scan_time,
+        a.Status as status,
+        a.CreatedAt as created_at,
+        s.Name as school_name,
+        s.SchoolID as school_id
+      FROM dbo.Attendance a
+      INNER JOIN Students st ON a.StudentID = st.StudentID
+      INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+      WHERE 1=1 
+      ${dateFilter}
+      ${schoolFilter}
+      ORDER BY a.ScanTime DESC, a.CreatedAt DESC
+    `)
+
+    // Get summary stats for the same period
+    const summaryResult = await request.query(`
+      SELECT 
+        COUNT(*) as total_records,
+        COUNT(CASE WHEN a.Status = 'IN' THEN 1 END) as check_ins,
+        COUNT(CASE WHEN a.Status = 'OUT' THEN 1 END) as check_outs,
+        COUNT(DISTINCT a.StudentID) as unique_students,
+        MIN(a.ScanTime) as earliest_scan,
+        MAX(a.ScanTime) as latest_scan
+      FROM dbo.Attendance a
+      INNER JOIN Students st ON a.StudentID = st.StudentID
+      INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+      WHERE 1=1 
+      ${dateFilter}
+      ${schoolFilter}
+    `)
+
+    const summary = summaryResult.recordset[0]
+
+    return {
+      current_activity: attendanceResult.recordset.map(record => ({
+        attendance_id: record.attendance_id,
+        student_id: record.student_id,
+        student_name: record.student_name,
+        scan_time: record.scan_time,
+        status: record.status,
+        created_at: record.created_at,
+        school_name: record.school_name,
+        school_id: record.school_id
+      })),
+      summary: {
+        total_records: summary.total_records || 0,
+        check_ins: summary.check_ins || 0,
+        check_outs: summary.check_outs || 0,
+        unique_students: summary.unique_students || 0,
+        date_range: {
+          earliest: summary.earliest_scan,
+          latest: summary.latest_scan,
+          requested_from: dateFrom,
+          requested_to: dateTo
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in getRealTimeAttendance:', error)
     throw error
   }
 }

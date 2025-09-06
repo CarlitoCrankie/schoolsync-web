@@ -612,9 +612,12 @@ export default function AdminDashboard({ user }) {
           {activeTab === 'upload' && !isCompanyAdmin && <UploadStudentsTab user={user} onUploadComplete={loadDashboardData} />}
           {/* {activeTab === 'attendance' && <div className="text-center py-8 text-gray-500">Attendance tab content would go here</div>} */}
           {activeTab === 'attendance' && <AttendanceTabMobileResponsive attendance={attendance} isCompanyAdmin={isCompanyAdmin} user={user} />}
-          {activeTab === 'system-monitor' && isCompanyAdmin && <SystemMonitorTab />}
+          {activeTab === 'system-monitor' && isCompanyAdmin && <SystemMonitorTab companyId={user.company_id} user={user} />}
+          {activeTab === 'schools' && isCompanyAdmin && <SchoolsNetworkTab companyId={user.company_id} user={user} />}
+          {activeTab === 'analytics' && isCompanyAdmin && <AnalyticsTab companyId={user.company_id} user={user} />}
+          {/* {activeTab === 'system-monitor' && isCompanyAdmin && <SystemMonitorTab />}
           {activeTab === 'schools' && isCompanyAdmin && <SchoolsNetworkTab />}
-          {activeTab === 'analytics' && isCompanyAdmin && <AnalyticsTab />}
+          {activeTab === 'analytics' && isCompanyAdmin && <AnalyticsTab />} */}
         </div>
       </div>
     </div>
@@ -1993,16 +1996,178 @@ function AttendanceTab({ attendance, isCompanyAdmin, user }) {
 //   )
 // }
 
-function SchoolsNetworkTab() {
+function SchoolsNetworkTab({ companyId, user }) {
+  const [schools, setSchools] = useState([])
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingSchool, setEditingSchool] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newSchool, setNewSchool] = useState({
+    name: '',
+    location: '',
+    machineId: '',
+    adminUsername: '',
+    adminPassword: '',
+    adminEmail: ''
+  })
+  const [createdSchoolCredentials, setCreatedSchoolCredentials] = useState(null)
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [error, setError] = useState('')
+
+  const [schoolForm, setSchoolForm] = useState({
+    name: '',
+    location: '',
+    machineId: '',
+    contactEmail: '',
+    contactPhone: '',
+    status: 'active'
+  })
+
+  // Get company ID from props or user object
+  const effectiveCompanyId = companyId || user?.company_id || user?.CompanyID || ''
+
+  useEffect(() => {
+    fetchSchoolsData()
+  }, [effectiveCompanyId])
+
+  const fetchSchoolsData = async () => {
+    try {
+      setLoading(true)
+      const url = effectiveCompanyId 
+        ? `/api/analytics?type=schools&company_id=${effectiveCompanyId}`
+        : `/api/analytics?type=schools`
+      
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.success && data.schools) {
+        setSchools(data.schools)
+      }
+    } catch (error) {
+      console.error('Error fetching schools data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateSchool = async () => {
+    try {
+      setActionLoading(true)
+      
+      const response = await fetch('/api/schools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSchool)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setCreatedSchoolCredentials(result.data.admin_credentials)
+        setShowCredentialsModal(true)
+        setShowAddModal(false)
+        setNewSchool({
+          name: '',
+          location: '',
+          machineId: '',
+          adminUsername: '',
+          adminPassword: '',
+          adminEmail: ''
+        })
+        
+        fetchSchoolsData()
+      } else {
+        setError(result.error || 'Failed to create school')
+      }
+    } catch (error) {
+      setError('Failed to create school: ' + error.message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDisableSchool = async (schoolId, schoolName) => {
+    if (!confirm(`Are you sure you want to disable "${schoolName}"?`)) {
+      return
+    }
+
+    setActionLoading(true)
+    
+    try {
+      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        fetchSchoolsData()
+        alert(`${schoolName} has been disabled successfully`)
+      } else {
+        alert('Failed to disable school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Disable school error:', error)
+      alert('Failed to disable school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleEnableSchool = async (schoolId, schoolName) => {
+    if (!confirm(`Enable "${schoolName}"?`)) {
+      return
+    }
+
+    setActionLoading(true)
+    
+    try {
+      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        fetchSchoolsData()
+        alert(`${schoolName} has been enabled successfully`)
+      } else {
+        alert('Failed to enable school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Enable school error:', error)
+      alert('Failed to enable school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="p-6 text-center">Loading schools network...</div>
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <h2 className="text-xl sm:text-2xl font-bold">Schools Network Management</h2>
         <div className="flex flex-col sm:flex-row gap-2">
-          <button className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">
+          <button 
+            onClick={fetchSchoolsData}
+            disabled={actionLoading}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm"
+          >
             Refresh
           </button>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+          <button 
+            onClick={() => setShowAddModal(true)}
+            disabled={actionLoading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
             Add New School
           </button>
         </div>
@@ -2012,24 +2177,308 @@ function SchoolsNetworkTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Total Schools</h3>
-          <p className="text-lg sm:text-2xl font-bold text-blue-600">4</p>
+          <p className="text-lg sm:text-2xl font-bold text-blue-600">{schools.length}</p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Active</h3>
-          <p className="text-lg sm:text-2xl font-bold text-green-600">4</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {schools.filter(s => s.status === 'active').length}
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Online</h3>
-          <p className="text-lg sm:text-2xl font-bold text-green-600">0</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {schools.filter(s => s.sync_agent?.connection_status === 'Online').length}
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Inactive</h3>
-          <p className="text-lg sm:text-2xl font-bold text-red-600">0</p>
+          <p className="text-lg sm:text-2xl font-bold text-red-600">
+            {schools.filter(s => s.status === 'inactive').length}
+          </p>
         </div>
       </div>
+
+      {/* Schools Management Table */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4 border-b">
+          <h3 className="text-base sm:text-lg font-semibold">Schools List</h3>
+        </div>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">School</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Location</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Students</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {schools.length > 0 ? schools.map((school) => (
+                  <tr key={school.school_id} className={school.status === 'inactive' ? 'bg-gray-50' : ''}>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{school.name}</div>
+                      <div className="text-xs text-gray-500">ID: {school.school_id}</div>
+                      <div className="text-xs text-gray-500 sm:hidden">
+                        {school.location} • {school.students?.active || 0}/{school.students?.total || 0} students
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                      {school.location}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-900 hidden sm:table-cell">
+                      {school.students?.active || 0}/{school.students?.total || 0}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div className="space-y-1">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          school.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {school.status || 'active'}
+                        </span>
+                        <div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            school.sync_agent?.connection_status === 'Online' ? 'bg-green-100 text-green-800' :
+                            school.sync_agent?.connection_status === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {school.sync_agent?.connection_status || 'Unknown'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+                      <div className="flex flex-col gap-1">
+                        <button 
+                          onClick={() => {/* Edit functionality */}}
+                          disabled={actionLoading}
+                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 text-xs"
+                        >
+                          Edit
+                        </button>
+                        {school.status === 'active' ? (
+                          <button 
+                            onClick={() => handleDisableSchool(school.school_id, school.name)}
+                            disabled={actionLoading}
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50 text-xs"
+                          >
+                            Disable
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleEnableSchool(school.school_id, school.name)}
+                            disabled={actionLoading}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50 text-xs"
+                          >
+                            Enable
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                      No schools found. Click "Add New School" to get started.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Add School Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Add New School</h3>
+            
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                {error}
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              {/* School Information */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">School Information</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="School Name *"
+                    value={newSchool.name}
+                    onChange={(e) => setNewSchool({...newSchool, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Location *"
+                    value={newSchool.location}
+                    onChange={(e) => setNewSchool({...newSchool, location: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Machine ID (optional)"
+                    value={newSchool.machineId}
+                    onChange={(e) => setNewSchool({...newSchool, machineId: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Admin Account Section */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Admin Account</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Admin Username (auto-generates if empty)"
+                    value={newSchool.adminUsername}
+                    onChange={(e) => setNewSchool({...newSchool, adminUsername: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Admin Password (auto-generates if empty)"
+                    value={newSchool.adminPassword}
+                    onChange={(e) => setNewSchool({...newSchool, adminPassword: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Admin Email (optional)"
+                    value={newSchool.adminEmail}
+                    onChange={(e) => setNewSchool({...newSchool, adminEmail: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  If username or password are left empty, they will be auto-generated and shown after creation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddModal(false)
+                  setError('')
+                }}
+                className="w-full px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSchool}
+                disabled={actionLoading || !newSchool.name || !newSchool.location}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? 'Creating...' : 'Create School'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Credentials Display Modal */}
+      {showCredentialsModal && createdSchoolCredentials && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-lg mx-4">
+            <div className="text-center mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">School Created Successfully!</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                The school has been created with an admin account. Please save these credentials securely.
+              </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-yellow-800 mb-3">Admin Login Credentials</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">Username:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.username}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">Password:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.password}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">School ID:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.school_id}
+                  </span>
+                </div>
+                {createdSchoolCredentials.email && (
+                  <div className="flex justify-between">
+                    <span className="font-medium text-yellow-700">Email:</span>
+                    <span className="font-mono bg-white px-2 py-1 rounded border">
+                      {createdSchoolCredentials.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-700">
+                <strong>Important:</strong> Save these credentials immediately. They will not be shown again. 
+                Share them securely with the school administrator.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  const credentials = `School Admin Login Credentials:
+Username: ${createdSchoolCredentials.username}
+Password: ${createdSchoolCredentials.password}
+School ID: ${createdSchoolCredentials.school_id}
+${createdSchoolCredentials.email ? `Email: ${createdSchoolCredentials.email}` : ''}`
+                  
+                  navigator.clipboard.writeText(credentials).then(() => {
+                    alert('Credentials copied to clipboard!')
+                  })
+                }}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Copy to Clipboard
+              </button>
+              <button
+                onClick={() => {
+                  setShowCredentialsModal(false)
+                  setCreatedSchoolCredentials(null)
+                }}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
 
 
 // System Monitor Tab Component
@@ -2183,14 +2632,41 @@ function SchoolsNetworkTab() {
 //     </div>
 //   )
 // }
-function SystemMonitorTab() {
+function SystemMonitorTab({ companyId }) {
+  const [systemData, setSystemData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchSystemData()
+    const interval = setInterval(fetchSystemData, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [companyId])
+
+  const fetchSystemData = async () => {
+    try {
+      setLoading(false) // Don't show loading on refresh
+      const response = await fetch(`/api/analytics?type=sync-performance&company_id=${companyId}`)
+      const data = await response.json()
+      setSystemData(data)
+    } catch (error) {
+      console.error('Error fetching system data:', error)
+    }
+  }
+
+  if (loading) {
+    return <div className="p-6 text-center">Loading system monitor...</div>
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <h2 className="text-xl sm:text-2xl font-bold">System Performance Monitor</h2>
         <div className="flex flex-col sm:flex-row gap-2">
           <span className="text-sm text-gray-500">Auto-refresh: 30s</span>
-          <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+          <button 
+            onClick={fetchSystemData}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm"
+          >
             Refresh Now
           </button>
         </div>
@@ -2200,23 +2676,123 @@ function SystemMonitorTab() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Total Agents</h3>
-          <p className="text-lg sm:text-2xl font-bold text-blue-600">4</p>
+          <p className="text-lg sm:text-2xl font-bold text-blue-600">
+            {systemData?.performance_metrics?.total_agents || 0}
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Online Agents</h3>
-          <p className="text-lg sm:text-2xl font-bold text-green-600">0</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {systemData?.performance_metrics?.online_agents || 0}
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Avg Error Rate</h3>
-          <p className="text-lg sm:text-2xl font-bold text-red-600">0%</p>
+          <p className="text-lg sm:text-2xl font-bold text-red-600">
+            {systemData?.performance_metrics?.avg_error_rate || 0}%
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Syncs/Hour</h3>
-          <p className="text-lg sm:text-2xl font-bold text-purple-600">0</p>
+          <p className="text-lg sm:text-2xl font-bold text-purple-600">
+            {Math.round(systemData?.performance_metrics?.avg_syncs_per_hour || 0)}
+          </p>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
           <h3 className="text-xs sm:text-sm font-medium text-gray-500">Uptime (Avg)</h3>
-          <p className="text-lg sm:text-2xl font-bold text-orange-600">0h</p>
+          <p className="text-lg sm:text-2xl font-bold text-orange-600">
+            {Math.round(systemData?.performance_metrics?.avg_uptime_hours || 0)}h
+          </p>
+        </div>
+      </div>
+
+      {/* Health Distribution */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-base sm:text-lg font-semibold mb-4">Agent Health Distribution</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">
+              {systemData?.health_distribution?.excellent || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Excellent (90%+)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-blue-600">
+              {systemData?.health_distribution?.good || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Good (70-89%)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600">
+              {systemData?.health_distribution?.fair || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Fair (50-69%)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-red-600">
+              {systemData?.health_distribution?.poor || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Poor (50%)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Agents Detail Table */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4 border-b">
+          <h3 className="text-base sm:text-lg font-semibold">Sync Agents Status</h3>
+        </div>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500">School</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Health Score</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Uptime</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Synced</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Errors</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Memory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {systemData?.agents?.length > 0 ? systemData.agents.map((agent) => (
+                  <tr key={agent.school_id}>
+                    <td className="px-3 sm:px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">{agent.school_name}</div>
+                      <div className="text-xs text-gray-500 sm:hidden">
+                        Health: {agent.health_score}% • Uptime: {agent.uptime_hours}h
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        agent.connection_status === 'Online' ? 'bg-green-100 text-green-800' :
+                        agent.connection_status === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {agent.connection_status}
+                      </span>
+                      <div className="text-xs text-gray-500 sm:hidden mt-1">
+                        Synced: {agent.total_synced} • Errors: {agent.total_errors}
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.health_score}%</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.uptime_hours}h</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.total_synced}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.total_errors}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.memory_usage_mb}MB</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                      No sync agents found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -2357,66 +2933,176 @@ function SystemMonitorTab() {
 //     </div>
 //   )
 // }
-function AnalyticsTab() {
+function AnalyticsTab({ companyId }) {
+  const [activeView, setActiveView] = useState('overview')
+  const [analyticsData, setAnalyticsData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAnalyticsData()
+  }, [activeView, companyId])
+
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/analytics?type=${activeView}&company_id=${companyId}`)
+      const data = await response.json()
+      setAnalyticsData(data)
+    } catch (error) {
+      console.error('Error fetching analytics data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const views = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'trends', label: 'Trends' },
+    { id: 'students', label: 'Students' },
+    { id: 'real-time', label: 'Real-time' }
+  ]
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <h2 className="text-xl sm:text-2xl font-bold">Analytics Dashboard</h2>
         <div className="flex flex-wrap gap-2">
-          {['Overview', 'Trends', 'Students', 'Real-time'].map(view => (
+          {views.map(view => (
             <button
-              key={view}
-              className="px-3 sm:px-4 py-2 rounded-lg bg-blue-600 text-white text-sm"
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-sm ${
+                activeView === view.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
-              {view}
+              {view.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Schools</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Total:</span>
-              <span className="font-bold">4</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Active:</span>
-              <span className="font-bold text-green-600">4</span>
-            </div>
-          </div>
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading analytics...</p>
         </div>
+      ) : (
+        <div className="space-y-6">
+          {activeView === 'overview' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Schools</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Total:</span>
+                    <span className="font-bold">{analyticsData?.overview?.schools?.total || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Active:</span>
+                    <span className="font-bold text-green-600">{analyticsData?.overview?.schools?.active || 0}</span>
+                  </div>
+                </div>
+              </div>
 
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Students</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Total:</span>
-              <span className="font-bold">397</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Active:</span>
-              <span className="font-bold text-green-600">391</span>
-            </div>
-          </div>
-        </div>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Students</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Total:</span>
+                    <span className="font-bold">{analyticsData?.overview?.students?.total || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Active:</span>
+                    <span className="font-bold text-green-600">{analyticsData?.overview?.students?.active || 0}</span>
+                  </div>
+                </div>
+              </div>
 
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Attendance</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Today:</span>
-              <span className="font-bold text-blue-600">0</span>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Attendance</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Today:</span>
+                    <span className="font-bold text-blue-600">{analyticsData?.overview?.attendance?.today || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>This Week:</span>
+                    <span className="font-bold">{analyticsData?.overview?.attendance?.week || 0}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span>This Week:</span>
-              <span className="font-bold">0</span>
+          )}
+
+          {activeView === 'real-time' && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last Minute</h3>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">
+                  {analyticsData?.live_metrics?.last_minute || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last 5 Minutes</h3>
+                <p className="text-lg sm:text-2xl font-bold text-blue-600">
+                  {analyticsData?.live_metrics?.last_5_minutes || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last 15 Minutes</h3>
+                <p className="text-lg sm:text-2xl font-bold text-purple-600">
+                  {analyticsData?.live_metrics?.last_15_minutes || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last Hour</h3>
+                <p className="text-lg sm:text-2xl font-bold text-orange-600">
+                  {analyticsData?.live_metrics?.last_hour || 0}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+
+          {activeView === 'trends' && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Attendance Trends</h3>
+              <div className="text-center py-8 text-gray-500">
+                <p>Trends visualization would appear here</p>
+                <p className="text-sm">Connect to chart library for detailed analytics</p>
+              </div>
+            </div>
+          )}
+
+          {activeView === 'students' && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Student Analytics</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-medium mb-2">Top Performers</h4>
+                  <div className="space-y-2">
+                    {Array.from({length: 5}, (_, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span>Student {i + 1}</span>
+                        <span className="text-green-600">{100 - i * 2}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Attendance Patterns</h4>
+                  <div className="text-sm text-gray-600">
+                    <p>Peak hours: 8:00 AM - 9:00 AM</p>
+                    <p>Average daily attendance: 85%</p>
+                    <p>Most active day: Monday</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -3493,6 +4179,576 @@ function UploadStudentsTab({ user, onUploadComplete }) {
   )
 }
 
+// function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
+//   const [dateRange, setDateRange] = useState({
+//     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+//     to: new Date().toISOString().split('T')[0]
+//   })
+//   const [attendanceData, setAttendanceData] = useState(attendance)
+//   const [loading, setLoading] = useState(false)
+
+//   useEffect(() => {
+//     setAttendanceData(attendance)
+//   }, [attendance])
+
+//   const refreshAttendance = async () => {
+//     setLoading(true)
+//     try {
+//       const params = new URLSearchParams({
+//         type: 'real-time',
+//         date_from: dateRange.from,
+//         date_to: dateRange.to
+//       })
+      
+//       if (isCompanyAdmin && user.company_id) {
+//         params.append('company_id', user.company_id)
+//       } else if (user.school_id || user.SchoolID) {
+//         params.append('school_id', user.school_id || user.SchoolID)
+//       }
+
+//       const response = await fetch(`/api/analytics?${params}`)
+//       const data = await response.json()
+      
+//       if (data.success && data.current_activity) {
+//         const formattedData = data.current_activity.map(record => ({
+//           id: record.attendance_id,
+//           studentName: record.student_name,
+//           student_name: record.student_name,
+//           status: record.status,
+//           time: record.scan_time,
+//           scan_time: record.scan_time,
+//           created_at: record.created_at
+//         }))
+//         setAttendanceData(formattedData)
+//       }
+//     } catch (error) {
+//       console.error('Error refreshing attendance:', error)
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   return (
+//     <div>
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <h3 className="text-lg font-semibold text-gray-900">
+//           {isCompanyAdmin ? 'Network Attendance Records' : 'Recent Attendance'}
+//         </h3>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <input
+//             type="date"
+//             value={dateRange.from}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             max={dateRange.to}
+//           />
+//           <input
+//             type="date"
+//             value={dateRange.to}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             min={dateRange.from}
+//             max={new Date().toISOString().split('T')[0]}
+//           />
+//           <button 
+//             onClick={refreshAttendance}
+//             disabled={loading}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+//           >
+//             {loading ? (
+//               <span className="flex items-center">
+//                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+//                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                 </svg>
+//                 Loading...
+//               </span>
+//             ) : (
+//               'Refresh'
+//             )}
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Attendance Summary */}
+//       {attendanceData && attendanceData.length > 0 && (
+//         <div className="mb-6 p-3 sm:p-4 bg-gray-50 rounded-lg">
+//           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-gray-900">{attendanceData.length}</div>
+//               <div className="text-xs sm:text-sm text-gray-600">Total Records</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-green-600">
+//                 {attendanceData.filter(r => r.status === 'IN').length}
+//               </div>
+//               <div className="text-xs sm:text-sm text-green-600">Check Ins</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-blue-600">
+//                 {attendanceData.filter(r => r.status === 'OUT').length}
+//               </div>
+//               <div className="text-xs sm:text-sm text-blue-600">Check Outs</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-purple-600">
+//                 {new Set(attendanceData.map(r => r.studentName || r.student_name)).size}
+//               </div>
+//               <div className="text-xs sm:text-sm text-purple-600">Unique Students</div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <div className="bg-white rounded-lg shadow overflow-hidden">
+//             <table className="min-w-full divide-y divide-gray-200">
+//               <thead className="bg-gray-50">
+//                 <tr>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Student
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Status
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Time
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Date
+//                   </th>
+//                 </tr>
+//               </thead>
+//               <tbody className="bg-white divide-y divide-gray-200">
+//                 {attendanceData && attendanceData.length > 0 ? (
+//                   attendanceData.slice(0, 50).map((record, index) => (
+//                     <tr key={record.id || index} className="hover:bg-gray-50 transition-colors">
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <div className="text-sm font-medium text-gray-900">
+//                           {record.studentName || record.student_name}
+//                         </div>
+//                         <div className="text-xs text-gray-500 sm:hidden">
+//                           {record.time || record.scan_time || record.created_at ? 
+//                             new Date(record.time || record.scan_time || record.created_at).toLocaleString() :
+//                             'No timestamp'
+//                           }
+//                         </div>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+//                           record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+//                           record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+//                           'bg-gray-100 text-gray-800'
+//                         }`}>
+//                           {record.status === 'IN' ? 'Check In' : 
+//                            record.status === 'OUT' ? 'Check Out' : 
+//                            record.status || 'Unknown'}
+//                         </span>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                         {record.time || record.scan_time || record.created_at ? 
+//                           new Date(record.time || record.scan_time || record.created_at).toLocaleTimeString() :
+//                           'No time'
+//                         }
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                         {record.time || record.scan_time || record.created_at ? 
+//                           new Date(record.time || record.scan_time || record.created_at).toLocaleDateString() :
+//                           'No date'
+//                         }
+//                       </td>
+//                     </tr>
+//                   ))
+//                 ) : (
+//                   <tr>
+//                     <td colSpan="4" className="px-6 py-12 text-center">
+//                       <div className="text-gray-500">
+//                         {loading ? (
+//                           <div className="flex items-center justify-center">
+//                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+//                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                             </svg>
+//                             Loading attendance records...
+//                           </div>
+//                         ) : (
+//                           <div>
+//                             <div className="text-gray-400 text-4xl mb-2">📊</div>
+//                             <p className="font-medium">No attendance records found</p>
+//                             <p className="text-sm mt-1">
+//                               {dateRange.from === dateRange.to ? 
+//                                 `No records for ${new Date(dateRange.from).toLocaleDateString()}` :
+//                                 `No records between ${new Date(dateRange.from).toLocaleDateString()} and ${new Date(dateRange.to).toLocaleDateString()}`
+//                               }
+//                             </p>
+//                             <p className="text-xs mt-2 text-gray-400">
+//                               Try selecting a different date range or check if students have checked in today.
+//                             </p>
+//                           </div>
+//                         )}
+//                       </div>
+//                     </td>
+//                   </tr>
+//                 )}
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* Records Info */}
+//       {attendanceData && attendanceData.length > 50 && (
+//         <div className="mt-4 text-center text-sm text-gray-500">
+//           Showing first 50 of {attendanceData.length} records. 
+//           <span className="ml-1">Use date filters to narrow results.</span>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+
+// function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
+//   const [dateRange, setDateRange] = useState({
+//     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+//     to: new Date().toISOString().split('T')[0]
+//   })
+//   const [attendanceData, setAttendanceData] = useState(attendance)
+//   const [loading, setLoading] = useState(false)
+
+//   useEffect(() => {
+//     setAttendanceData(attendance)
+//   }, [attendance])
+
+//   // Get effective company/school ID
+//   const getEffectiveId = () => {
+//     if (isCompanyAdmin) {
+//       return user?.company_id || user?.CompanyID || user?.companyId || ''
+//     } else {
+//       return user?.school_id || user?.SchoolID || user?.schoolId || ''
+//     }
+//   }
+
+
+// //   const refreshAttendance = async () => {
+// //   setLoading(true)
+// //   try {
+// //     const params = new URLSearchParams({
+// //       type: 'real-time',
+// //       date_from: dateRange.from,
+// //       date_to: dateRange.to
+// //     })
+    
+// //     if (isCompanyAdmin && user.company_id) {
+// //       params.append('company_id', user.company_id)
+// //     } else if (user.school_id || user.SchoolID) {
+// //       params.append('school_id', user.school_id || user.SchoolID)
+// //     }
+
+// //     // Use analytics endpoint for admin attendance data (NOT /api/attendance)
+// //     const response = await fetch(`/api/analytics?${params}`)
+// //     const data = await response.json()
+    
+// //     if (data.success && data.current_activity) {
+// //       const formattedData = data.current_activity.map(record => ({
+// //         id: record.attendance_id,
+// //         studentName: record.student_name,
+// //         student_name: record.student_name,
+// //         status: record.status,
+// //         time: record.scan_time,
+// //         scan_time: record.scan_time,
+// //         created_at: record.created_at
+// //       }))
+// //       setAttendanceData(formattedData)
+// //     }
+// //   } catch (error) {
+// //     console.error('Error refreshing attendance:', error)
+// //   } finally {
+// //     setLoading(false)
+// //   }
+// // }
+// const refreshAttendance = async () => {
+//   setLoading(true)
+//   try {
+//     const params = new URLSearchParams({
+//       type: 'real-time'
+//     })
+    
+//     // Add school_id for school admins
+//     if (!isCompanyAdmin && (user.school_id || user.SchoolID)) {
+//       params.append('school_id', user.school_id || user.SchoolID)
+//     }
+    
+//     // Add date filters if your analytics API supports them (currently it doesn't for real-time)
+//     // params.append('date_from', dateRange.from)
+//     // params.append('date_to', dateRange.to)
+
+//     // Use GET request to analytics endpoint
+//     const response = await fetch(`/api/analytics?${params}`)
+//     const data = await response.json()
+    
+//     console.log('Analytics response:', data) // Debug log
+    
+//     if (data.success && data.current_activity) {
+//       const formattedData = data.current_activity.map(record => ({
+//         id: record.attendance_id,
+//         studentName: record.student_name,
+//         student_name: record.student_name,
+//         status: record.status,
+//         time: record.scan_time,
+//         scan_time: record.scan_time,
+//         created_at: record.created_at
+//       }))
+//       setAttendanceData(formattedData)
+//     } else {
+//       console.warn('No current_activity in response:', data)
+//       setAttendanceData([])
+//     }
+//   } catch (error) {
+//     console.error('Error refreshing attendance:', error)
+//     setAttendanceData([])
+//   } finally {
+//     setLoading(false)
+//   }
+// }
+
+//   const tryAnalyticsEndpoint = async () => {
+//     try {
+//       const params = new URLSearchParams({
+//         type: 'real-time',
+//         date_from: dateRange.from,
+//         date_to: dateRange.to
+//       })
+      
+//       const effectiveId = getEffectiveId()
+//       if (isCompanyAdmin && effectiveId) {
+//         params.append('company_id', effectiveId)
+//       } else if (!isCompanyAdmin && effectiveId) {
+//         params.append('school_id', effectiveId)
+//       }
+
+//       console.log('Trying analytics endpoint with params:', params.toString())
+
+//       const response = await fetch(`/api/analytics?${params}`)
+//       const data = await response.json()
+//       console.log('Analytics API response:', data)
+      
+//       if (data.success && data.current_activity) {
+//         const formattedData = data.current_activity.map(record => ({
+//           id: record.attendance_id || record.id,
+//           studentName: record.student_name,
+//           student_name: record.student_name,
+//           status: record.status,
+//           time: record.scan_time,
+//           scan_time: record.scan_time,
+//           created_at: record.created_at
+//         }))
+//         setAttendanceData(formattedData)
+//       } else {
+//         console.warn('No attendance data found in analytics response')
+//         setAttendanceData([])
+//       }
+//     } catch (error) {
+//       console.error('Error with analytics endpoint:', error)
+//       setAttendanceData([])
+//     }
+//   }
+
+//   // Auto-refresh on date range change
+//   useEffect(() => {
+//     if (dateRange.from && dateRange.to) {
+//       refreshAttendance()
+//     }
+//   }, [dateRange.from, dateRange.to, isCompanyAdmin])
+
+//   return (
+//     <div>
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <h3 className="text-lg font-semibold text-gray-900">
+//           {isCompanyAdmin ? 'Network Attendance Records' : 'Recent Attendance'}
+//         </h3>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <input
+//             type="date"
+//             value={dateRange.from}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             max={dateRange.to}
+//           />
+//           <input
+//             type="date"
+//             value={dateRange.to}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             min={dateRange.from}
+//             max={new Date().toISOString().split('T')[0]}
+//           />
+//           <button 
+//             onClick={refreshAttendance}
+//             disabled={loading}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+//           >
+//             {loading ? (
+//               <span className="flex items-center">
+//                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+//                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                 </svg>
+//                 Loading...
+//               </span>
+//             ) : (
+//               'Refresh'
+//             )}
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Debug info - remove in production */}
+//       <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+//         <p><strong>Debug Info:</strong></p>
+//         <p>User ID: {getEffectiveId() || 'Not found'}</p>
+//         <p>Is Company Admin: {isCompanyAdmin ? 'Yes' : 'No'}</p>
+//         <p>Date Range: {dateRange.from} to {dateRange.to}</p>
+//         <p>Records Found: {attendanceData?.length || 0}</p>
+//       </div>
+
+//       {/* Attendance Summary */}
+//       {attendanceData && attendanceData.length > 0 && (
+//         <div className="mb-6 p-3 sm:p-4 bg-gray-50 rounded-lg">
+//           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-gray-900">{attendanceData.length}</div>
+//               <div className="text-xs sm:text-sm text-gray-600">Total Records</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-green-600">
+//                 {attendanceData.filter(r => r.status === 'IN').length}
+//               </div>
+//               <div className="text-xs sm:text-sm text-green-600">Check Ins</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-blue-600">
+//                 {attendanceData.filter(r => r.status === 'OUT').length}
+//               </div>
+//               <div className="text-xs sm:text-sm text-blue-600">Check Outs</div>
+//             </div>
+//             <div>
+//               <div className="text-xl sm:text-2xl font-bold text-purple-600">
+//                 {new Set(attendanceData.map(r => r.studentName || r.student_name)).size}
+//               </div>
+//               <div className="text-xs sm:text-sm text-purple-600">Unique Students</div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <div className="bg-white rounded-lg shadow overflow-hidden">
+//             <table className="min-w-full divide-y divide-gray-200">
+//               <thead className="bg-gray-50">
+//                 <tr>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Student
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Status
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Time
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Date
+//                   </th>
+//                 </tr>
+//               </thead>
+//               <tbody className="bg-white divide-y divide-gray-200">
+//                 {attendanceData && attendanceData.length > 0 ? (
+//                   attendanceData.slice(0, 50).map((record, index) => (
+//                     <tr key={record.id || index} className="hover:bg-gray-50 transition-colors">
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <div className="text-sm font-medium text-gray-900">
+//                           {record.studentName || record.student_name}
+//                         </div>
+//                         <div className="text-xs text-gray-500 sm:hidden">
+//                           {record.time || record.scan_time || record.created_at ? 
+//                             new Date(record.time || record.scan_time || record.created_at).toLocaleString() :
+//                             'No timestamp'
+//                           }
+//                         </div>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+//                           record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+//                           record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+//                           'bg-gray-100 text-gray-800'
+//                         }`}>
+//                           {record.status === 'IN' ? 'Check In' : 
+//                            record.status === 'OUT' ? 'Check Out' : 
+//                            record.status || 'Unknown'}
+//                         </span>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                         {record.time || record.scan_time || record.created_at ? 
+//                           new Date(record.time || record.scan_time || record.created_at).toLocaleTimeString() :
+//                           'No time'
+//                         }
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                         {record.time || record.scan_time || record.created_at ? 
+//                           new Date(record.time || record.scan_time || record.created_at).toLocaleDateString() :
+//                           'No date'
+//                         }
+//                       </td>
+//                     </tr>
+//                   ))
+//                 ) : (
+//                   <tr>
+//                     <td colSpan="4" className="px-6 py-12 text-center">
+//                       <div className="text-gray-500">
+//                         {loading ? (
+//                           <div className="flex items-center justify-center">
+//                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+//                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                             </svg>
+//                             Loading attendance records...
+//                           </div>
+//                         ) : (
+//                           <div>
+//                             <div className="text-gray-400 text-4xl mb-2">📊</div>
+//                             <p className="font-medium">No attendance records found</p>
+//                             <p className="text-sm mt-1">
+//                               {dateRange.from === dateRange.to ? 
+//                                 `No records for ${new Date(dateRange.from).toLocaleDateString()}` :
+//                                 `No records between ${new Date(dateRange.from).toLocaleDateString()} and ${new Date(dateRange.to).toLocaleDateString()}`
+//                               }
+//                             </p>
+//                             <p className="text-xs mt-2 text-gray-400">
+//                               Try expanding the date range or check if attendance data exists in your system.
+//                             </p>
+//                           </div>
+//                         )}
+//                       </div>
+//                     </td>
+//                   </tr>
+//                 )}
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* Records Info */}
+//       {attendanceData && attendanceData.length > 50 && (
+//         <div className="mt-4 text-center text-sm text-gray-500">
+//           Showing first 50 of {attendanceData.length} records. 
+//           <span className="ml-1">Use date filters to narrow results.</span>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
 function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -3500,6 +4756,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   })
   const [attendanceData, setAttendanceData] = useState(attendance)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     setAttendanceData(attendance)
@@ -3507,38 +4764,110 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
 
   const refreshAttendance = async () => {
     setLoading(true)
+    setError(null)
+    
     try {
       const params = new URLSearchParams({
-        type: 'real-time',
-        date_from: dateRange.from,
-        date_to: dateRange.to
+        type: 'real-time'
       })
       
-      if (isCompanyAdmin && user.company_id) {
-        params.append('company_id', user.company_id)
-      } else if (user.school_id || user.SchoolID) {
+      // Always add date range for better filtering
+      if (dateRange.from) {
+        params.append('date_from', dateRange.from)
+      }
+      if (dateRange.to) {
+        params.append('date_to', dateRange.to)
+      }
+      
+      // Add school_id for school admins only
+      if (!isCompanyAdmin && (user?.school_id || user?.SchoolID)) {
         params.append('school_id', user.school_id || user.SchoolID)
       }
 
+      console.log('Fetching attendance with params:', params.toString())
+
       const response = await fetch(`/api/analytics?${params}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
       
-      if (data.success && data.current_activity) {
-        const formattedData = data.current_activity.map(record => ({
-          id: record.attendance_id,
-          studentName: record.student_name,
-          student_name: record.student_name,
-          status: record.status,
-          time: record.scan_time,
-          scan_time: record.scan_time,
-          created_at: record.created_at
-        }))
-        setAttendanceData(formattedData)
+      console.log('API Response:', data)
+      
+      if (data.success) {
+        if (data.current_activity && Array.isArray(data.current_activity)) {
+          const formattedData = data.current_activity.map(record => ({
+            id: record.attendance_id,
+            studentName: record.student_name,
+            student_name: record.student_name,
+            status: record.status,
+            time: record.scan_time,
+            scan_time: record.scan_time,
+            created_at: record.created_at,
+            school_name: record.school_name,
+            school_id: record.school_id
+          }))
+          
+          // Sort by scan_time descending (most recent first)
+          formattedData.sort((a, b) => {
+            const timeA = new Date(a.scan_time || a.created_at)
+            const timeB = new Date(b.scan_time || b.created_at)
+            return timeB - timeA
+          })
+          
+          setAttendanceData(formattedData)
+        } else {
+          console.warn('No current_activity array in response')
+          setAttendanceData([])
+        }
+      } else {
+        setError(data.error || 'Failed to fetch attendance data')
+        setAttendanceData([])
       }
     } catch (error) {
       console.error('Error refreshing attendance:', error)
+      setError(error.message)
+      setAttendanceData([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Auto-refresh when date range changes
+  useEffect(() => {
+    if (dateRange.from && dateRange.to) {
+      refreshAttendance()
+    }
+  }, [dateRange.from, dateRange.to])
+
+  // Helper function to format time consistently
+  const formatTime = (timestamp) => {
+    if (!timestamp) return 'No time'
+    try {
+      return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+    } catch (e) {
+      return 'Invalid time'
+    }
+  }
+
+  // Helper function to format date consistently
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'No date'
+    try {
+      return new Date(timestamp).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    } catch (e) {
+      return 'Invalid date'
     }
   }
 
@@ -3582,6 +4911,22 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
             )}
           </button>
         </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          Error: {error}
+        </div>
+      )}
+
+      {/* Debug info - remove in production */}
+      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+        <p><strong>Debug Info:</strong></p>
+        <p>User ID: {(user?.school_id || user?.SchoolID) || 'Not found'}</p>
+        <p>Is Company Admin: {isCompanyAdmin ? 'Yes' : 'No'}</p>
+        <p>Date Range: {dateRange.from} to {dateRange.to}</p>
+        <p>Records Found: {attendanceData?.length || 0}</p>
       </div>
 
       {/* Attendance Summary */}
@@ -3632,6 +4977,11 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                     Date
                   </th>
+                  {isCompanyAdmin && (
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                      School
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -3640,13 +4990,10 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                     <tr key={record.id || index} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 sm:px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {record.studentName || record.student_name}
+                          {record.studentName || record.student_name || 'Unknown Student'}
                         </div>
                         <div className="text-xs text-gray-500 sm:hidden">
-                          {record.time || record.scan_time || record.created_at ? 
-                            new Date(record.time || record.scan_time || record.created_at).toLocaleString() :
-                            'No timestamp'
-                          }
+                          {formatTime(record.scan_time || record.time || record.created_at)}
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4">
@@ -3661,22 +5008,21 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                         </span>
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                        {record.time || record.scan_time || record.created_at ? 
-                          new Date(record.time || record.scan_time || record.created_at).toLocaleTimeString() :
-                          'No time'
-                        }
+                        {formatTime(record.scan_time || record.time || record.created_at)}
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                        {record.time || record.scan_time || record.created_at ? 
-                          new Date(record.time || record.scan_time || record.created_at).toLocaleDateString() :
-                          'No date'
-                        }
+                        {formatDate(record.scan_time || record.time || record.created_at)}
                       </td>
+                      {isCompanyAdmin && (
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+                          {record.school_name || 'Unknown School'}
+                        </td>
+                      )}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4" className="px-6 py-12 text-center">
+                    <td colSpan={isCompanyAdmin ? "5" : "4"} className="px-6 py-12 text-center">
                       <div className="text-gray-500">
                         {loading ? (
                           <div className="flex items-center justify-center">
@@ -3692,12 +5038,12 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                             <p className="font-medium">No attendance records found</p>
                             <p className="text-sm mt-1">
                               {dateRange.from === dateRange.to ? 
-                                `No records for ${new Date(dateRange.from).toLocaleDateString()}` :
-                                `No records between ${new Date(dateRange.from).toLocaleDateString()} and ${new Date(dateRange.to).toLocaleDateString()}`
+                                `No records for ${formatDate(dateRange.from)}` :
+                                `No records between ${formatDate(dateRange.from)} and ${formatDate(dateRange.to)}`
                               }
                             </p>
                             <p className="text-xs mt-2 text-gray-400">
-                              Try selecting a different date range or check if students have checked in today.
+                              Try expanding the date range or check if attendance data exists in your system.
                             </p>
                           </div>
                         )}
