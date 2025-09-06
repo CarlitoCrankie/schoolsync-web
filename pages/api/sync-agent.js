@@ -717,6 +717,9 @@ export default async function handler(req, res) {
     let result = {}
 
     switch (action) {
+      case 'get_students_list':
+        result = await getStudentsList(currentPool, req.body.school_id || req.query.school_id)
+        break
       case 'check_attendance_table':
         result = await checkAttendanceTable(currentPool)
         break
@@ -1307,5 +1310,56 @@ async function updateParentContact(pool, data) {
   } catch (error) {
     console.error('updateParentContact error:', error)
     throw new Error(`Update parent contact failed: ${error.message}`)
+  }
+}
+
+// Get students list with parent password status
+async function getStudentsList(pool, schoolId) {
+  try {
+    console.log(`Getting students list for school: ${schoolId}`)
+
+    let query = `
+      SELECT 
+        s.StudentID as student_id,
+        s.Name as name,
+        s.Grade as grade,
+        s.SchoolID as school_id,
+        s.IsActive as is_active,
+        CASE 
+          WHEN p.Email IS NOT NULL OR p.PhoneNumber IS NOT NULL THEN 1 
+          ELSE 0 
+        END as parent_password_set,
+        '' as student_code,
+        p.Email as parent_email,
+        p.PhoneNumber as parent_phone,
+        p.Name as parent_name
+      FROM Students s
+      LEFT JOIN Parents p ON s.StudentID = p.StudentID
+      WHERE s.IsActive = 1
+    `
+
+    const request = pool.request()
+
+    // Add school filter if provided
+    if (schoolId && schoolId !== 'undefined') {
+      query += ` AND s.SchoolID = @schoolId`
+      request.input('schoolId', sql.Int, parseInt(schoolId))
+    }
+
+    query += ` ORDER BY s.Name`
+
+    const result = await request.query(query)
+
+    console.log(`Found ${result.recordset.length} students`)
+
+    return {
+      students: result.recordset,
+      count: result.recordset.length,
+      message: 'Students list retrieved successfully from database'
+    }
+
+  } catch (error) {
+    console.error('getStudentsList error:', error)
+    throw new Error(`Get students list failed: ${error.message}`)
   }
 }
