@@ -368,7 +368,7 @@ export default function LoginScreen({ onLogin }) {
   })
   const [passwordSetup, setPasswordSetup] = useState({
     student_name: '',
-    school_id: '',
+    school_name: '', // Changed to school_name instead of school_id
     new_password: '',
     confirm_password: ''
   })
@@ -378,43 +378,51 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  // Load schools when component mounts or when switching to set-password view
+  // Load schools when switching to set-password view
   useEffect(() => {
-    if (currentView === 'set-password') {
+    if (currentView === 'set-password' && schools.length === 0) {
       loadSchools()
     }
   }, [currentView])
 
   const loadSchools = async () => {
     setLoadingSchools(true)
+    setError('')
+    
     try {
-      const response = await fetch('/api/schools', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
-
+      const response = await fetch('/api/schools')
+      
       if (!response.ok) {
-        throw new Error('Failed to load schools')
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json()
+      const result = await response.json()
       
-      // Filter only active schools for parent registration
-      const activeSchools = data.schools ? data.schools.filter(school => school.status === 'active') : []
-      setSchools(activeSchools)
-      
-      // Set default school if available
-      if (activeSchools.length > 0) {
-        setPasswordSetup(prev => ({
-          ...prev,
-          school_id: activeSchools[0].id.toString()
-        }))
+      if (result.success && result.data) {
+        // Filter active schools and map to simpler format
+        const activeSchools = result.data
+          .filter(school => school.status === 'active')
+          .map(school => ({
+            id: school.school_id,
+            name: school.name,
+            location: school.location
+          }))
+        
+        setSchools(activeSchools)
+        
+        // Set first school as default
+        if (activeSchools.length > 0) {
+          setPasswordSetup(prev => ({
+            ...prev,
+            school_name: activeSchools[0].name
+          }))
+        }
+      } else {
+        throw new Error('Invalid response format')
       }
     } catch (error) {
-      console.error('Error loading schools:', error)
-      setError('Failed to load schools. Please refresh the page.')
+      console.error('Failed to load schools:', error)
+      setError('Failed to load schools. Please try again.')
     } finally {
       setLoadingSchools(false)
     }
@@ -479,8 +487,15 @@ export default function LoginScreen({ onLogin }) {
   }
 
   const checkPasswordStatus = async () => {
-    if (!passwordSetup.student_name || !passwordSetup.school_id) {
+    if (!passwordSetup.student_name || !passwordSetup.school_name) {
       setError('Please enter student name and select school')
+      return
+    }
+
+    // Find the selected school to get its ID
+    const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
+    if (!selectedSchool) {
+      setError('Please select a valid school')
       return
     }
 
@@ -496,7 +511,7 @@ export default function LoginScreen({ onLogin }) {
         body: JSON.stringify({
           action: 'check_password_status',
           student_name: passwordSetup.student_name,
-          school_id: parseInt(passwordSetup.school_id)
+          school_id: selectedSchool.id
         }),
       })
 
@@ -521,7 +536,7 @@ export default function LoginScreen({ onLogin }) {
   const handleSetPassword = async (e) => {
     e.preventDefault()
 
-    if (!passwordSetup.student_name || !passwordSetup.school_id || 
+    if (!passwordSetup.student_name || !passwordSetup.school_name || 
         !passwordSetup.new_password || !passwordSetup.confirm_password) {
       setError('Please fill in all fields')
       return
@@ -537,6 +552,13 @@ export default function LoginScreen({ onLogin }) {
       return
     }
 
+    // Find the selected school to get its ID
+    const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
+    if (!selectedSchool) {
+      setError('Please select a valid school')
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -549,7 +571,7 @@ export default function LoginScreen({ onLogin }) {
         body: JSON.stringify({
           action: 'set_password',
           student_name: passwordSetup.student_name,
-          school_id: parseInt(passwordSetup.school_id),
+          school_id: selectedSchool.id,
           new_password: passwordSetup.new_password
         }),
       })
@@ -565,7 +587,7 @@ export default function LoginScreen({ onLogin }) {
       setFormData({ ...formData, username: passwordSetup.student_name })
       setPasswordSetup({
         student_name: '',
-        school_id: schools.length > 0 ? schools[0].school_id.toString() : '',
+        school_name: schools.length > 0 ? schools[0].name : '',
         new_password: '',
         confirm_password: ''
       })
@@ -683,49 +705,57 @@ export default function LoginScreen({ onLogin }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">School</label>
               {loadingSchools ? (
-                <div className="input-field bg-gray-100 text-gray-500">
+                <div className="input-field bg-gray-100 text-gray-500 flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
                   Loading schools...
                 </div>
               ) : schools.length > 0 ? (
                 <select 
-                  name="school_id"
-                  value={passwordSetup.school_id}
+                  name="school_name"
+                  value={passwordSetup.school_name}
                   onChange={handlePasswordSetupChange}
                   className="input-field"
                   disabled={loading}
                 >
-                  <option value="">Select a school</option>
+                  <option value="">Select your child's school</option>
                   {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name} {school.location ? `- ${school.location}` : ''}
+                    <option key={school.id} value={school.name}>
+                      {school.name}{school.location ? ` - ${school.location}` : ''}
                     </option>
                   ))}
                 </select>
               ) : (
                 <div className="input-field bg-red-50 text-red-600 border-red-200">
-                  No active schools available. Please contact support.
+                  No active schools found. 
+                  <button 
+                    type="button" 
+                    onClick={loadSchools}
+                    className="ml-2 text-blue-600 underline hover:text-blue-800"
+                  >
+                    Try again
+                  </button>
                 </div>
               )}
             </div>
 
-            <div className="flex space-x-2">
+            <div>
               <button 
                 type="button"
                 onClick={checkPasswordStatus}
-                disabled={loading || !passwordSetup.student_name || !passwordSetup.school_id || schools.length === 0}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+                disabled={loading || !passwordSetup.student_name || !passwordSetup.school_name || schools.length === 0}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
               >
-                {loadingSchools ? 'Loading...' : 'Check Student'}
+                {loading ? 'Checking...' : 'Check Student'}
               </button>
             </div>
 
             {message && (
-            <>
+              <>
                 <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     New Password
-                </label>
-                <input 
+                  </label>
+                  <input 
                     type="password" 
                     name="new_password"
                     value={passwordSetup.new_password}
@@ -734,14 +764,14 @@ export default function LoginScreen({ onLogin }) {
                     placeholder="Enter new password (6+ characters)"
                     disabled={loading}
                     minLength="6"
-                />
+                  />
                 </div>
 
                 <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password
-                </label>
-                <input 
+                  </label>
+                  <input 
                     type="password" 
                     name="confirm_password"
                     value={passwordSetup.confirm_password}
@@ -750,17 +780,17 @@ export default function LoginScreen({ onLogin }) {
                     placeholder="Confirm your password"
                     disabled={loading}
                     minLength="6"
-                />
+                  />
                 </div>
 
                 <button 
-                type="submit"
-                disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
                 >
-                {loading ? 'Setting Password...' : 'Set Password'}
+                  {loading ? 'Setting Password...' : 'Set Password'}
                 </button>
-            </>
+              </>
             )}
           </form>
         )}
