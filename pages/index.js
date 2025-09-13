@@ -1,4 +1,4 @@
-// pages/index.js - Restored with proper ParentDashboard
+// pages/index.js - Fixed with proper token validation and logout handling
 import { useState, useEffect } from 'react'
 import LoginScreen from '../components/LoginScreen'
 import ParentDashboard from '../components/ParentDashboard'
@@ -20,14 +20,35 @@ export default function Home() {
       
       if (token && userInfo) {
         try {
+          // Validate token expiration
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          const currentTime = Date.now() / 1000
+          
+          if (payload.exp && payload.exp < currentTime) {
+            console.log('Token expired, clearing auth state')
+            clearAuthData()
+            setLoading(false)
+            return
+          }
+          
+          // Token is valid, restore user state
           setCurrentUser(JSON.parse(userInfo))
         } catch (e) {
-          localStorage.removeItem('token')
-          localStorage.removeItem('userInfo')
+          console.log('Invalid token or user data, clearing auth state')
+          clearAuthData()
         }
       }
     }
     setLoading(false)
+  }
+
+  const clearAuthData = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('userInfo')
+    }
   }
 
   const handleLogin = (user, token) => {
@@ -39,11 +60,16 @@ export default function Home() {
   }
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userInfo')
-    }
+    console.log('Logout initiated')
+    clearAuthData()
     setCurrentUser(null)
+    
+    // Force a hard redirect to ensure clean state
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.location.replace('/')
+      }
+    }, 100)
   }
 
   if (loading) {
@@ -65,9 +91,9 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Header user={currentUser} onLogout={handleLogout} />
       {currentUser.user_type === 'admin' ? (
-        <AdminDashboard user={currentUser} />
+        <AdminDashboard user={currentUser} onLogout={handleLogout} />
       ) : (
-        <ParentDashboard user={currentUser} />
+        <ParentDashboard user={currentUser} onLogout={handleLogout} />
       )}
     </div>
   )

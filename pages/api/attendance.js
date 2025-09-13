@@ -53,7 +53,68 @@ export default async function handler(req, res) {
   }
 }
 
-// Get student attendance records
+// // Get student attendance records
+// async function getStudentAttendance(pool, studentId, schoolId, limit, days) {
+//   try {
+//     if (!studentId) {
+//       throw new Error('Student ID is required')
+//     }
+
+//     // Get attendance records for the specified period
+//     const attendanceQuery = await pool.request()
+//       .input('studentId', sql.Int, studentId)
+//       .input('schoolId', sql.Int, schoolId || 2)
+//       .input('limit', sql.Int, limit)
+//       .input('days', sql.Int, days)
+//       .query(`
+//         SELECT TOP (@limit)
+//           a.AttendanceID,
+//           a.StudentID,
+//           a.ScanTime,
+//           a.Status,
+//           a.CreatedAt,
+//           s.Name as StudentName,
+//           s.Grade
+//         FROM dbo.Attendance a
+//         LEFT JOIN Students s ON a.StudentID = s.StudentID
+//         WHERE a.StudentID = @studentId 
+//         AND a.SchoolID = @schoolId
+//         AND a.ScanTime >= DATEADD(day, -@days, GETDATE())
+//         ORDER BY a.ScanTime DESC
+//       `)
+
+//     // Process attendance data for parent dashboard format
+//     const attendanceRecords = attendanceQuery.recordset.map(record => ({
+//       id: record.AttendanceID,
+//       date: record.ScanTime.toISOString().split('T')[0], // YYYY-MM-DD format
+//       scanTime: record.ScanTime.toISOString(),
+//       status: record.Status,
+//       studentName: record.StudentName,
+//       grade: record.Grade
+//     }))
+
+//     // Calculate basic stats
+//     const stats = calculateAttendanceStats(attendanceRecords, days)
+
+//     return {
+//       attendance: attendanceRecords,
+//       stats,
+//       student: attendanceRecords.length > 0 ? {
+//         name: attendanceRecords[0].studentName,
+//         grade: attendanceRecords[0].grade
+//       } : null,
+//       period: {
+//         days,
+//         from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+//         to: new Date().toISOString().split('T')[0]
+//       }
+//     }
+
+//   } catch (error) {
+//     throw new Error(`Get student attendance failed: ${error.message}`)
+//   }
+// }
+// FIXED: Get student attendance records with proper stats calculation
 async function getStudentAttendance(pool, studentId, schoolId, limit, days) {
   try {
     if (!studentId) {
@@ -93,8 +154,8 @@ async function getStudentAttendance(pool, studentId, schoolId, limit, days) {
       grade: record.Grade
     }))
 
-    // Calculate basic stats
-    const stats = calculateAttendanceStats(attendanceRecords, days)
+    // FIXED: Calculate proper stats using unique days
+    const stats = await calculateProperAttendanceStats(pool, studentId, schoolId, days)
 
     return {
       attendance: attendanceRecords,
@@ -115,39 +176,19 @@ async function getStudentAttendance(pool, studentId, schoolId, limit, days) {
   }
 }
 
-// Get attendance statistics
+// FIXED: Get attendance statistics with proper unique day counting
 async function getAttendanceStats(pool, studentId, schoolId, days) {
   try {
     if (!studentId) {
       throw new Error('Student ID is required')
     }
 
-    // Get attendance data for stats calculation
-    const statsQuery = await pool.request()
-      .input('studentId', sql.Int, studentId)
-      .input('schoolId', sql.Int, schoolId || 2)
-      .input('days', sql.Int, days)
-      .query(`
-        SELECT 
-          a.ScanTime,
-          a.Status,
-          CAST(a.ScanTime as DATE) as AttendanceDate
-        FROM dbo.Attendance a
-        WHERE a.StudentID = @studentId 
-        AND a.SchoolID = @schoolId
-        AND a.ScanTime >= DATEADD(day, -@days, GETDATE())
-        ORDER BY a.ScanTime DESC
-      `)
-
-    const records = statsQuery.recordset.map(record => ({
-      date: record.AttendanceDate,
-      scanTime: record.ScanTime,
-      status: record.Status
-    }))
+    // Use the new proper stats calculation function
+    const stats = await calculateProperAttendanceStats(pool, studentId, schoolId, days)
 
     return {
-      stats: calculateAttendanceStats(records, days),
-      totalRecords: records.length,
+      stats,
+      totalRecords: stats.totalRecords || 0,
       period: days
     }
 
@@ -155,6 +196,174 @@ async function getAttendanceStats(pool, studentId, schoolId, days) {
     throw new Error(`Get attendance stats failed: ${error.message}`)
   }
 }
+
+// NEW: Proper stats calculation function that counts unique days
+async function calculateProperAttendanceStats(pool, studentId, schoolId, days) {
+  try {
+    // FIXED: Calculate stats based on unique DAYS, not individual records
+    const statsQuery = await pool.request()
+      .input('studentId', sql.Int, studentId)
+      .input('schoolId', sql.Int, schoolId || 2)
+      .input('days', sql.Int, days)
+      .query(`
+        SELECT 
+          -- Count unique days with at least one check-in (Present Days)
+          COUNT(DISTINCT CASE 
+            WHEN a.Status = 'IN' 
+            THEN CAST(a.ScanTime as DATE) 
+          END) as PresentDays,
+          
+          -- Count unique days with late arrivals (Late Days)
+          -- Adjust the time '08:30:00' based on your school's late threshold
+          COUNT(DISTINCT CASE 
+            WHEN a.Status = 'IN' 
+            AND CONVERT(TIME, a.ScanTime) > '08:30:00' 
+            THEN CAST(a.ScanTime as DATE) 
+          END) as LateDays,
+          
+          -- Total unique attendance days
+          COUNT(DISTINCT CAST(a.ScanTime as DATE)) as TotalAttendanceDays,
+          
+          -- Total attendance records (for reference)
+          COUNT(a.AttendanceID) as TotalRecords,
+          
+          -- Get date range for calculation
+          MIN(CAST(a.ScanTime as DATE)) as EarliestDate,
+          MAX(CAST(a.ScanTime as DATE)) as LatestDate
+        FROM dbo.Attendance a
+        WHERE a.StudentID = @studentId 
+        AND a.SchoolID = @schoolId
+        AND a.ScanTime >= DATEADD(day, -@days, GETDATE())
+      `)
+
+    const result = statsQuery.recordset[0]
+    
+    // Calculate derived stats
+    const presentDays = result.PresentDays || 0
+    const lateDays = result.LateDays || 0
+    const totalAttendanceDays = result.TotalAttendanceDays || 0
+    
+    // Calculate absent days based on expected school days
+    // Note: This is a simplified calculation. You might want to:
+    // 1. Exclude weekends and holidays
+    // 2. Use actual school calendar data
+    // 3. Account for partial periods
+    
+    // Rough estimate: assume 5 school days per week
+    const expectedSchoolDays = Math.floor((days / 7) * 5)
+    const absentDays = Math.max(0, expectedSchoolDays - presentDays)
+    
+    // Calculate attendance rate
+    const attendanceRate = expectedSchoolDays > 0 
+      ? Math.round((presentDays / expectedSchoolDays) * 100) 
+      : 0
+
+    return {
+      // FIXED: Now returns proper day-based counts
+      presentDays: presentDays,
+      lateDays: lateDays,
+      absentDays: absentDays,
+      attendanceRate: attendanceRate,
+      
+      // Additional useful stats
+      totalAttendanceDays: totalAttendanceDays,
+      totalRecords: result.TotalRecords || 0,
+      expectedSchoolDays: expectedSchoolDays,
+      
+      // Date range info
+      period: {
+        days: days,
+        earliestRecord: result.EarliestDate,
+        latestRecord: result.LatestDate
+      }
+    }
+
+  } catch (error) {
+    throw new Error(`Calculate attendance stats failed: ${error.message}`)
+  }
+}
+
+// LEGACY: Keep the old function for backward compatibility, but mark it as deprecated
+function calculateAttendanceStats(records, days) {
+  console.warn('calculateAttendanceStats is deprecated. Use calculateProperAttendanceStats instead.')
+  
+  // Group records by date to get unique days
+  const uniqueDays = new Set()
+  const lateDays = new Set()
+  
+  records.forEach(record => {
+    const date = record.date || record.scanTime.split('T')[0]
+    
+    if (record.status === 'IN') {
+      uniqueDays.add(date)
+      
+      // Check if late (assuming 8:30 AM threshold)
+      const time = new Date(record.scanTime)
+      const hours = time.getHours()
+      const minutes = time.getMinutes()
+      
+      if (hours > 8 || (hours === 8 && minutes > 30)) {
+        lateDays.add(date)
+      }
+    }
+  })
+  
+  const presentDays = uniqueDays.size
+  const expectedSchoolDays = Math.floor((days / 7) * 5) // Rough estimate
+  const absentDays = Math.max(0, expectedSchoolDays - presentDays)
+  const attendanceRate = expectedSchoolDays > 0 
+    ? Math.round((presentDays / expectedSchoolDays) * 100) 
+    : 0
+  
+  return {
+    presentDays,
+    lateDays: lateDays.size,
+    absentDays,
+    attendanceRate,
+    totalRecords: records.length
+  }
+}
+
+// Get attendance statistics
+// async function getAttendanceStats(pool, studentId, schoolId, days) {
+//   try {
+//     if (!studentId) {
+//       throw new Error('Student ID is required')
+//     }
+
+//     // Get attendance data for stats calculation
+//     const statsQuery = await pool.request()
+//       .input('studentId', sql.Int, studentId)
+//       .input('schoolId', sql.Int, schoolId || 2)
+//       .input('days', sql.Int, days)
+//       .query(`
+//         SELECT 
+//           a.ScanTime,
+//           a.Status,
+//           CAST(a.ScanTime as DATE) as AttendanceDate
+//         FROM dbo.Attendance a
+//         WHERE a.StudentID = @studentId 
+//         AND a.SchoolID = @schoolId
+//         AND a.ScanTime >= DATEADD(day, -@days, GETDATE())
+//         ORDER BY a.ScanTime DESC
+//       `)
+
+//     const records = statsQuery.recordset.map(record => ({
+//       date: record.AttendanceDate,
+//       scanTime: record.ScanTime,
+//       status: record.Status
+//     }))
+
+//     return {
+//       stats: calculateAttendanceStats(records, days),
+//       totalRecords: records.length,
+//       period: days
+//     }
+
+//   } catch (error) {
+//     throw new Error(`Get attendance stats failed: ${error.message}`)
+//   }
+// }
 
 // Get recent activity (last few check-ins/outs)
 async function getRecentActivity(pool, studentId, schoolId, limit) {
@@ -197,62 +406,62 @@ async function getRecentActivity(pool, studentId, schoolId, limit) {
   }
 }
 
-// Helper function to calculate attendance statistics
-function calculateAttendanceStats(records, periodDays) {
-  if (!records || records.length === 0) {
-    return {
-      totalDays: periodDays,
-      presentDays: 0,
-      lateDays: 0,
-      absentDays: periodDays,
-      attendanceRate: 0,
-      checkIns: 0,
-      checkOuts: 0
-    }
-  }
+// // Helper function to calculate attendance statistics
+// function calculateAttendanceStats(records, periodDays) {
+//   if (!records || records.length === 0) {
+//     return {
+//       totalDays: periodDays,
+//       presentDays: 0,
+//       lateDays: 0,
+//       absentDays: periodDays,
+//       attendanceRate: 0,
+//       checkIns: 0,
+//       checkOuts: 0
+//     }
+//   }
 
-  // Group records by date to determine daily attendance
-  const dailyAttendance = {}
-  let checkIns = 0
-  let checkOuts = 0
+//   // Group records by date to determine daily attendance
+//   const dailyAttendance = {}
+//   let checkIns = 0
+//   let checkOuts = 0
 
-  records.forEach(record => {
-    const date = record.date || record.scanTime.split('T')[0]
+//   records.forEach(record => {
+//     const date = record.date || record.scanTime.split('T')[0]
     
-    if (!dailyAttendance[date]) {
-      dailyAttendance[date] = { hasCheckIn: false, hasCheckOut: false, records: [] }
-    }
+//     if (!dailyAttendance[date]) {
+//       dailyAttendance[date] = { hasCheckIn: false, hasCheckOut: false, records: [] }
+//     }
     
-    dailyAttendance[date].records.push(record)
+//     dailyAttendance[date].records.push(record)
     
-    if (record.status === 'IN') {
-      dailyAttendance[date].hasCheckIn = true
-      checkIns++
-    } else if (record.status === 'OUT') {
-      dailyAttendance[date].hasCheckOut = true
-      checkOuts++
-    }
-  })
+//     if (record.status === 'IN') {
+//       dailyAttendance[date].hasCheckIn = true
+//       checkIns++
+//     } else if (record.status === 'OUT') {
+//       dailyAttendance[date].hasCheckOut = true
+//       checkOuts++
+//     }
+//   })
 
-  // Calculate attendance stats
-  const uniqueDatesWithActivity = Object.keys(dailyAttendance).length
-  const presentDays = Object.values(dailyAttendance).filter(day => day.hasCheckIn).length
+//   // Calculate attendance stats
+//   const uniqueDatesWithActivity = Object.keys(dailyAttendance).length
+//   const presentDays = Object.values(dailyAttendance).filter(day => day.hasCheckIn).length
   
-  // For simplicity, we'll consider any day with a check-in as present
-  // In a more sophisticated system, you might have business rules for late arrivals
-  const lateDays = 0 // Could be calculated based on check-in times vs school start time
-  const absentDays = Math.max(0, periodDays - presentDays)
-  const attendanceRate = periodDays > 0 ? ((presentDays / periodDays) * 100) : 0
+//   // For simplicity, we'll consider any day with a check-in as present
+//   // In a more sophisticated system, you might have business rules for late arrivals
+//   const lateDays = 0 // Could be calculated based on check-in times vs school start time
+//   const absentDays = Math.max(0, periodDays - presentDays)
+//   const attendanceRate = periodDays > 0 ? ((presentDays / periodDays) * 100) : 0
 
-  return {
-    totalDays: periodDays,
-    presentDays,
-    lateDays,
-    absentDays,
-    attendanceRate: Math.round(attendanceRate * 10) / 10, // Round to 1 decimal place
-    checkIns,
-    checkOuts,
-    activeDays: uniqueDatesWithActivity,
-    lastActivity: records.length > 0 ? records[0].scanTime : null
-  }
-}
+//   return {
+//     totalDays: periodDays,
+//     presentDays,
+//     lateDays,
+//     absentDays,
+//     attendanceRate: Math.round(attendanceRate * 10) / 10, // Round to 1 decimal place
+//     checkIns,
+//     checkOuts,
+//     activeDays: uniqueDatesWithActivity,
+//     lastActivity: records.length > 0 ? records[0].scanTime : null
+//   }
+// }

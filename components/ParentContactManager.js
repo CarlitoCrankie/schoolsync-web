@@ -276,7 +276,7 @@ export default function ParentContactManager({ user, onComplete, isRequired = fa
       </div>
 
       {/* Test Notification Section */}
-      {hasContactInfo && !isRequired && (
+      {/* {hasContactInfo && !isRequired && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <h4 className="font-medium text-gray-900 mb-2">Test Notifications</h4>
           <p className="text-sm text-gray-600 mb-3">
@@ -288,7 +288,7 @@ export default function ParentContactManager({ user, onComplete, isRequired = fa
             {contactInfo.phone && <p>• Phone: {contactInfo.phone}</p>}
           </div>
         </div>
-      )}
+      )} */}
     </div>
   )
 }
