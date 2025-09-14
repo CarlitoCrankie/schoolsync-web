@@ -2220,128 +2220,128 @@ function StudentsTab({ students, onRefresh, user }) {
   )
 }
 
-function UploadStudentsTab({ user, onUploadComplete }) {
-  const [file, setFile] = useState(null)
-  const [uploading, setUploading] = useState(false)
-  const [results, setResults] = useState(null)
+// function UploadStudentsTab({ user, onUploadComplete }) {
+//   const [file, setFile] = useState(null)
+//   const [uploading, setUploading] = useState(false)
+//   const [results, setResults] = useState(null)
 
-  const downloadTemplate = () => {
-    const csvContent = [
-      ['name', 'grade', 'student_code', 'parent_password'],
-      ['John Smith', '10th', 'JS001', 'parent123'],
-      ['Jane Doe', '9th', 'JD002', 'secure456'],
-      ['Mike Johnson', '11th', 'MJ003', 'password789'],
-      ['', '', '', '']
-    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+//   const downloadTemplate = () => {
+//     const csvContent = [
+//       ['name', 'grade', 'student_code', 'parent_password'],
+//       ['John Smith', '10th', 'JS001', 'parent123'],
+//       ['Jane Doe', '9th', 'JD002', 'secure456'],
+//       ['Mike Johnson', '11th', 'MJ003', 'password789'],
+//       ['', '', '', '']
+//     ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
 
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `student_upload_template_${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-  }
+//     const blob = new Blob([csvContent], { type: 'text/csv' })
+//     const url = window.URL.createObjectURL(blob)
+//     const link = document.createElement('a')
+//     link.href = url
+//     link.download = `student_upload_template_${new Date().toISOString().split('T')[0]}.csv`
+//     document.body.appendChild(link)
+//     link.click()
+//     document.body.removeChild(link)
+//     window.URL.revokeObjectURL(url)
+//   }
 
-  const handleFileUpload = async (e) => {
-    e.preventDefault()
+//   const handleFileUpload = async (e) => {
+//     e.preventDefault()
     
-    if (!file) {
-      alert('Please select a file to upload')
-      return
-    }
+//     if (!file) {
+//       alert('Please select a file to upload')
+//       return
+//     }
 
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('school_id', user.school_id || 2)
+//     const formData = new FormData()
+//     formData.append('file', file)
+//     formData.append('school_id', user.school_id || 2)
 
-    setUploading(true)
-    setResults(null)
+//     setUploading(true)
+//     setResults(null)
 
-    try {
-      const response = await fetch('/api/students/upload', {
-        method: 'POST',
-        body: formData
-      })
+//     try {
+//       const response = await fetch('/api/students/upload', {
+//         method: 'POST',
+//         body: formData
+//       })
 
-      const result = await response.json()
-      setResults(result)
+//       const result = await response.json()
+//       setResults(result)
       
-      if (result.success) {
-        onUploadComplete()
-        alert(`Upload successful! ${result.summary?.added || 0} students added, ${result.summary?.updated || 0} updated.`)
-      }
-    } catch (error) {
-      console.error('Upload error:', error)
-      setResults({ success: false, error: 'Upload failed: Network error' })
-    } finally {
-      setUploading(false)
-    }
-  }
+//       if (result.success) {
+//         onUploadComplete()
+//         alert(`Upload successful! ${result.summary?.added || 0} students added, ${result.summary?.updated || 0} updated.`)
+//       }
+//     } catch (error) {
+//       console.error('Upload error:', error)
+//       setResults({ success: false, error: 'Upload failed: Network error' })
+//     } finally {
+//       setUploading(false)
+//     }
+//   }
 
-  return (
-    <div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Upload Students from CSV</h3>
+//   return (
+//     <div>
+//       <h3 className="text-lg font-semibold text-gray-900 mb-6">Upload Students from CSV</h3>
       
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h4 className="font-medium text-blue-900 mb-2">CSV Template</h4>
-        <p className="text-sm text-blue-800 mb-4">
-          Download a template to ensure your CSV file has the correct format and column headers.
-        </p>
+//       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+//         <h4 className="font-medium text-blue-900 mb-2">CSV Template</h4>
+//         <p className="text-sm text-blue-800 mb-4">
+//           Download a template to ensure your CSV file has the correct format and column headers.
+//         </p>
         
-        <button
-          onClick={downloadTemplate}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
-        >
-          Download Template
-        </button>
-      </div>
+//         <button
+//           onClick={downloadTemplate}
+//           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+//         >
+//           Download Template
+//         </button>
+//       </div>
 
-      <form onSubmit={handleFileUpload} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select CSV File to Upload
-          </label>
-          <div className="flex items-center justify-center w-full">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <p className="mb-2 text-sm text-gray-500">
-                  <span className="font-semibold">Click to upload</span> or drag and drop
-                </p>
-                <p className="text-xs text-gray-500">CSV files only</p>
-              </div>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) => setFile(e.target.files[0])}
-                className="hidden"
-                disabled={uploading}
-              />
-            </label>
-          </div>
-          {file && (
-            <p className="mt-2 text-sm text-gray-600">
-              Selected: <span className="font-medium">{file.name}</span>
-            </p>
-          )}
-        </div>
+//       <form onSubmit={handleFileUpload} className="space-y-4">
+//         <div>
+//           <label className="block text-sm font-medium text-gray-700 mb-2">
+//             Select CSV File to Upload
+//           </label>
+//           <div className="flex items-center justify-center w-full">
+//             <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+//               <div className="flex flex-col items-center justify-center pt-5 pb-6">
+//                 <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+//                 </svg>
+//                 <p className="mb-2 text-sm text-gray-500">
+//                   <span className="font-semibold">Click to upload</span> or drag and drop
+//                 </p>
+//                 <p className="text-xs text-gray-500">CSV files only</p>
+//               </div>
+//               <input
+//                 type="file"
+//                 accept=".csv"
+//                 onChange={(e) => setFile(e.target.files[0])}
+//                 className="hidden"
+//                 disabled={uploading}
+//               />
+//             </label>
+//           </div>
+//           {file && (
+//             <p className="mt-2 text-sm text-gray-600">
+//               Selected: <span className="font-medium">{file.name}</span>
+//             </p>
+//           )}
+//         </div>
 
-        <button
-          type="submit"
-          disabled={!file || uploading}
-          className="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-        >
-          {uploading ? 'Uploading Students...' : 'Upload Students'}
-        </button>
-      </form>
-    </div>
-  )
-}
+//         <button
+//           type="submit"
+//           disabled={!file || uploading}
+//           className="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+//         >
+//           {uploading ? 'Uploading Students...' : 'Upload Students'}
+//         </button>
+//       </form>
+//     </div>
+//   )
+// }
 
 //AttendanceTabMobileResponsive Component
 // function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
@@ -2881,6 +2881,203 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //     </div>
 //   )
 // }
+
+function UploadStudentsTab({ user, onUploadComplete }) {
+  const [file, setFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [results, setResults] = useState(null)
+
+  const downloadTemplate = () => {
+    const csvContent = [
+      // Headers
+      ['name', 'grade', 'student_code', 'parent_name', 'parent_email', 'parent_phone', 'parent_password'],
+      // Example data
+      ['John Smith', '10th', 'JS001', 'Mary Smith', 'mary.smith@email.com', '+233244567890', '12345'],
+      ['Jane Doe', '9th', 'JD002', 'Robert Doe', 'robert.doe@email.com', '+233244567891', '12345'],
+      ['Mike Johnson', '11th', 'MJ003', 'Sarah Johnson', 'sarah.johnson@email.com', '+233244567892', '12345'],
+      ['', '', '', '', '', '', ''],
+      // Instructions
+      ['INSTRUCTIONS:', '', '', '', '', '', ''],
+      ['- name: Student full name (required)', '', '', '', '', '', ''],
+      ['- grade: Student grade/class', '', '', '', '', '', ''],
+      ['- student_code: Unique identifier (optional)', '', '', '', '', '', ''],
+      ['- parent_name: Parent/Guardian name (optional)', '', '', '', '', '', ''],
+      ['- parent_email: Parent email for notifications', '', '', '', '', '', ''],
+      ['- parent_phone: Parent phone number', '', '', '', '', '', ''],
+      ['- parent_password: Default "12345", parent can change later', '', '', '', '', '', '']
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `student_upload_template_with_parents_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleFileUpload = async (e) => {
+    e.preventDefault()
+    
+    if (!file) {
+      alert('Please select a file to upload')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('school_id', user.school_id || user.SchoolID || 2)
+
+    setUploading(true)
+    setResults(null)
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+      setResults(result)
+      
+      if (result.success) {
+        onUploadComplete()
+        alert(`Upload successful! ${result.summary?.students_added || 0} students added, ${result.summary?.students_updated || 0} updated, ${result.summary?.parents_created || 0} parent records created.`)
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      setResults({ success: false, error: 'Upload failed: Network error' })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Upload Students with Parent Information</h3>
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <h4 className="font-medium text-blue-900 mb-2">Enhanced CSV Template</h4>
+        <p className="text-sm text-blue-800 mb-4">
+          New template includes parent contact information and default passwords. 
+          Download the template to ensure your CSV file has the correct format.
+        </p>
+        
+        <div className="space-y-2 text-sm text-blue-700">
+          <p><strong>New Features:</strong></p>
+          <ul className="list-disc list-inside ml-4 space-y-1">
+            <li>Parent name, email, and phone number columns</li>
+            <li>Default password "12345" for all parents</li>
+            <li>Parents can login immediately and change password later</li>
+            <li>Automatic parent account creation</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={downloadTemplate}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+        >
+          Download Enhanced Template
+        </button>
+      </div>
+
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <h4 className="font-medium text-yellow-900 mb-2">Important Notes</h4>
+        <div className="space-y-2 text-sm text-yellow-800">
+          <p><strong>Default Password:</strong> All parents will get "12345" as default password</p>
+          <p><strong>Parent Login:</strong> Parents can login using their child's full name + "12345"</p>
+          <p><strong>Password Reset:</strong> Parents can change their password using the "Reset Password" option</p>
+          <p><strong>Contact Info:</strong> Email and phone are optional but recommended for notifications</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleFileUpload} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Enhanced CSV File to Upload
+          </label>
+          <div className="flex items-center justify-center w-full">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="mb-2 text-sm text-gray-500">
+                  <span className="font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-gray-500">CSV files with parent information</p>
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setFile(e.target.files[0])}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+          </div>
+          {file && (
+            <div className="mt-2 text-sm text-gray-600">
+              <p>Selected: <span className="font-medium">{file.name}</span></p>
+              <p className="text-xs text-gray-500">
+                Make sure your CSV includes columns: name, grade, student_code, parent_name, parent_email, parent_phone, parent_password
+              </p>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={!file || uploading}
+          className="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {uploading ? 'Uploading Students & Parents...' : 'Upload Students & Parent Data'}
+        </button>
+      </form>
+
+      {results && (
+        <div className={`mt-6 p-4 rounded-lg ${results.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <h4 className={`font-medium mb-2 ${results.success ? 'text-green-900' : 'text-red-900'}`}>
+            Upload Results
+          </h4>
+          
+          {results.success ? (
+            <div className="space-y-2 text-sm text-green-800">
+              <p><strong>Students Added:</strong> {results.summary?.students_added || 0}</p>
+              <p><strong>Students Updated:</strong> {results.summary?.students_updated || 0}</p>
+              <p><strong>Parent Records Created:</strong> {results.summary?.parents_created || 0}</p>
+              <p><strong>Parent Records Updated:</strong> {results.summary?.parents_updated || 0}</p>
+              <p><strong>Default Passwords Set:</strong> {results.summary?.default_passwords_set || 0}</p>
+              
+              {results.warnings && results.warnings.length > 0 && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <p className="font-medium text-yellow-900">Warnings:</p>
+                  <ul className="list-disc list-inside text-yellow-800">
+                    {results.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm text-red-800">
+              <p><strong>Error:</strong> {results.error}</p>
+              {results.details && (
+                <div className="mt-2">
+                  <p className="font-medium">Details:</p>
+                  <pre className="text-xs bg-red-100 p-2 rounded mt-1 overflow-x-auto">{results.details}</pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],

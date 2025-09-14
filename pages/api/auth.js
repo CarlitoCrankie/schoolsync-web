@@ -39,6 +39,8 @@
 //       return await handleCheckPasswordStatus(student_name, school_id, res)
 //     } else if (action === 'set_password') {
 //       return await handleSetPassword(student_name, school_id, new_password, res)
+//     } else if (action === 'reset_password') {
+//       return await handleResetPassword(student_name, school_id, new_password, res)
 //     } else {
 //       return res.status(400).json({ error: 'Invalid action' })
 //     }
@@ -54,10 +56,6 @@
 // }
 
 // async function handleLogin(username, password, res) {
-//   // Add debug code HERE, inside the function
-//   console.log('Login attempt for username:', username)
-//   console.log('Input password hash:', hashPassword(password))
-  
 //   if (!username || !password) {
 //     return res.status(400).json({ error: 'Username and password required' })
 //   }
@@ -77,36 +75,59 @@
     
 //     if (adminResult.recordset.length > 0) {
 //       const user = adminResult.recordset[0]
-//       const hashedInput = hashPassword(password)
+//       const dbHash = user.PasswordHash
+//       let passwordMatch = false
+
+//       // Check if it's a bcrypt hash (starts with $2b$, $2a$, etc.)
+//       if (dbHash.startsWith('$2')) {
+//         console.log('Found bcrypt hash for user:', user.Username)
+//         console.log('Converting to SHA-256 for consistency...')
+        
+//         // For bcrypt hashes, we'll need to update them to SHA-256
+//         // This handles the transition period
+//         const hashedInput = hashPassword(password)
+        
+//         // Update the database to use SHA-256 hash instead of bcrypt
+//         await pool.request()
+//           .input('userId', sql.Int, user.UserID)
+//           .input('newHash', sql.NVarChar, hashedInput)
+//           .query(`
+//             UPDATE Users 
+//             SET PasswordHash = @newHash 
+//             WHERE UserID = @userId
+//           `)
+        
+//         console.log('Updated password hash to SHA-256 for user:', user.Username)
+//         passwordMatch = true // Since we're converting, assume the password is correct
+//       } else {
+//         // Use SHA-256 for comparison (standard)
+//         const hashedInput = hashPassword(password)
+//         passwordMatch = hashedInput === dbHash
+//       }
       
-//       // Add more debug code here
-//       console.log('Found user:', user.Username)
-//       console.log('DB password hash:', user.PasswordHash)
-//       console.log('Input password hash:', hashedInput)
-//       console.log('Hashes match:', hashedInput === user.PasswordHash)
-      
-//       if (hashedInput === user.PasswordHash) {
+//       if (passwordMatch) {
 //         const token = generateToken({
 //           user_id: user.UserID,
 //           username: user.Username,
 //           role: user.Role,
-//           school_id: user.SchoolID,
+//           school_id: user.SchoolID,  // Keep this as school_id for consistency
 //           user_type: 'admin'
 //         })
 
-//         return res.json({
-//           token,
-//           user: {
-//             id: user.UserID,
-//             username: user.Username,
-//             role: user.Role,
-//             user_type: 'admin',
-//             school: user.SchoolID ? {
-//               id: user.SchoolID,
-//               name: user.SchoolName
-//             } : null
-//           }
-//         })
+//       return res.json({
+//         token,
+//         user: {
+//           id: user.UserID,
+//           username: user.Username,
+//           role: user.Role,
+//           user_type: 'admin',
+//           school_id: user.SchoolID,  // ← ADD THIS LINE
+//           school: user.SchoolID ? {
+//             id: user.SchoolID,
+//             name: user.SchoolName
+//           } : null
+//         }
+//       })
 //       }
 //     }
 
@@ -297,6 +318,67 @@
 //     return res.status(500).json({ error: 'Failed to set password', message: error.message })
 //   }
 // }
+
+// async function handleResetPassword(student_name, school_id, new_password, res) {
+//   if (!student_name || !school_id || !new_password) {
+//     return res.status(400).json({ error: 'All fields required' })
+//   }
+
+//   if (new_password.length < 6) {
+//     return res.status(400).json({ error: 'Password must be at least 6 characters' })
+//   }
+
+//   try {
+//     const pool = await getPool()
+    
+//     // Check if student exists and already has a password set
+//     const checkResult = await pool.request()
+//       .input('studentName', sql.NVarChar, student_name)
+//       .input('schoolId', sql.Int, school_id)
+//       .query(`
+//         SELECT StudentID, ParentPasswordSet 
+//         FROM Students 
+//         WHERE Name = @studentName AND SchoolID = @schoolId AND IsActive = 1
+//       `)
+
+//     if (checkResult.recordset.length === 0) {
+//       return res.status(404).json({ error: 'Student not found' })
+//     }
+
+//     const student = checkResult.recordset[0]
+    
+//     if (!student.ParentPasswordSet) {
+//       return res.status(400).json({ 
+//         error: 'No password is set for this student. Please use the "First Time?" option instead.' 
+//       })
+//     }
+
+//     // Update the password
+//     const updateResult = await pool.request()
+//       .input('studentName', sql.NVarChar, student_name)
+//       .input('schoolId', sql.Int, school_id)
+//       .input('passwordHash', sql.NVarChar, hashPassword(new_password))
+//       .query(`
+//         UPDATE Students 
+//         SET ParentPasswordHash = @passwordHash
+//         WHERE Name = @studentName AND SchoolID = @schoolId AND IsActive = 1
+//       `)
+
+//     if (updateResult.rowsAffected[0] === 0) {
+//       return res.status(500).json({ error: 'Failed to update password' })
+//     }
+
+//     return res.json({ 
+//       message: 'Password reset successfully',
+//       student_id: student.StudentID
+//     })
+
+//   } catch (error) {
+//     console.error('Reset password error:', error)
+//     return res.status(500).json({ error: 'Failed to reset password', message: error.message })
+//   }
+// }
+
 // pages/api/auth.js - Updated to auto-create Parents record when password is set
 const sql = require('mssql')
 const crypto = require('crypto')
@@ -333,7 +415,9 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'login') {
-      return await handleLogin(username, password, res)
+      return await handleLogin(username, password, school_id, res)
+    } else if (action === 'check_student_schools') {
+      return await handleCheckStudentSchools(student_name, res)
     } else if (action === 'check_password_status') {
       return await handleCheckPasswordStatus(student_name, school_id, res)
     } else if (action === 'set_password') {
@@ -354,7 +438,40 @@ export default async function handler(req, res) {
   }
 }
 
-async function handleLogin(username, password, res) {
+async function handleCheckStudentSchools(student_name, res) {
+  if (!student_name) {
+    return res.status(400).json({ error: 'Student name is required' })
+  }
+
+  try {
+    const pool = await getPool()
+    const result = await pool.request()
+      .input('studentName', sql.NVarChar, student_name.trim())
+      .query(`
+        SELECT DISTINCT s.Name as name, s.SchoolID as id, s.Location as location
+        FROM Students st
+        INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+        WHERE st.Name = @studentName AND st.IsActive = 1 AND s.Status = 'active'
+      `)
+
+    const schools = result.recordset.map(row => ({
+      id: row.id,
+      name: row.name,
+      location: row.location
+    }))
+
+    return res.json({ 
+      success: true, 
+      schools: schools 
+    })
+
+  } catch (error) {
+    console.error('Check student schools error:', error)
+    return res.status(500).json({ error: 'Failed to check student schools' })
+  }
+}
+
+async function handleLogin(username, password, school_id, res) {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' })
   }
@@ -362,145 +479,172 @@ async function handleLogin(username, password, res) {
   try {
     const pool = await getPool()
 
-    // Try admin login first
-    const adminResult = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .query(`
-        SELECT u.UserID, u.Username, u.PasswordHash, u.Role, u.SchoolID, s.Name as SchoolName
-        FROM Users u
-        LEFT JOIN Schools s ON u.SchoolID = s.SchoolID
-        WHERE u.Username = @username AND u.IsActive = 1
-      `)
-    
-    if (adminResult.recordset.length > 0) {
-      const user = adminResult.recordset[0]
-      const dbHash = user.PasswordHash
-      let passwordMatch = false
-
-      // Check if it's a bcrypt hash (starts with $2b$, $2a$, etc.)
-      if (dbHash.startsWith('$2')) {
-        console.log('Found bcrypt hash for user:', user.Username)
-        console.log('Converting to SHA-256 for consistency...')
-        
-        // For bcrypt hashes, we'll need to update them to SHA-256
-        // This handles the transition period
-        const hashedInput = hashPassword(password)
-        
-        // Update the database to use SHA-256 hash instead of bcrypt
-        await pool.request()
-          .input('userId', sql.Int, user.UserID)
-          .input('newHash', sql.NVarChar, hashedInput)
-          .query(`
-            UPDATE Users 
-            SET PasswordHash = @newHash 
-            WHERE UserID = @userId
-          `)
-        
-        console.log('Updated password hash to SHA-256 for user:', user.Username)
-        passwordMatch = true // Since we're converting, assume the password is correct
-      } else {
-        // Use SHA-256 for comparison (standard)
-        const hashedInput = hashPassword(password)
-        passwordMatch = hashedInput === dbHash
-      }
-      
-      if (passwordMatch) {
-        const token = generateToken({
-          user_id: user.UserID,
-          username: user.Username,
-          role: user.Role,
-          school_id: user.SchoolID,  // Keep this as school_id for consistency
-          user_type: 'admin'
-        })
-
-      return res.json({
-        token,
-        user: {
-          id: user.UserID,
-          username: user.Username,
-          role: user.Role,
-          user_type: 'admin',
-          school_id: user.SchoolID,  // ← ADD THIS LINE
-          school: user.SchoolID ? {
-            id: user.SchoolID,
-            name: user.SchoolName
-          } : null
-        }
-      })
-      }
-    }
-
-    // Try parent login
-    const parentResult = await pool.request()
-      .input('studentName', sql.NVarChar, username)
-      .input('passwordHash', sql.NVarChar, hashPassword(password))
-      .query(`
-        SELECT 
-          s.StudentID,
-          s.Name as StudentName,
-          s.SchoolID,
-          sc.Name as SchoolName,
-          s.Grade,
-          p.Name as ParentName,
-          p.PhoneNumber,
-          p.Email,
-          p.ParentID
-        FROM Students s
-        JOIN Schools sc ON s.SchoolID = sc.SchoolID
-        LEFT JOIN Parents p ON s.StudentID = p.StudentID AND p.IsPrimary = 1
-        WHERE s.Name = @studentName 
-        AND s.ParentPasswordHash = @passwordHash 
-        AND s.ParentPasswordSet = 1 
-        AND s.IsActive = 1
-      `)
-
-    if (parentResult.recordset.length > 0) {
-      const user = parentResult.recordset[0]
-      
-      // Update last login
-      await pool.request()
-        .input('studentName', sql.NVarChar, username)
-        .input('passwordHash', sql.NVarChar, hashPassword(password))
+    // Try admin login first (only if no school_id provided)
+    if (!school_id) {
+      const adminResult = await pool.request()
+        .input('username', sql.NVarChar, username)
         .query(`
-          UPDATE Students 
-          SET LastLoginAt = GETDATE()
-          WHERE Name = @studentName AND ParentPasswordHash = @passwordHash
+          SELECT u.UserID, u.Username, u.PasswordHash, u.Role, u.SchoolID, s.Name as SchoolName
+          FROM Users u
+          LEFT JOIN Schools s ON u.SchoolID = s.SchoolID
+          WHERE u.Username = @username AND u.IsActive = 1
         `)
+      
+      if (adminResult.recordset.length > 0) {
+        const user = adminResult.recordset[0]
+        const dbHash = user.PasswordHash
+        let passwordMatch = false
 
-      const token = generateToken({
-        student_id: user.StudentID,
-        student_name: user.StudentName,
-        school_id: user.SchoolID,
-        parent_name: user.ParentName,
-        parent_id: user.ParentID,
-        role: 'parent',
-        user_type: 'parent'
-      })
-
-      return res.json({
-        token,
-        user: {
-          student_id: user.StudentID,
-          student_name: user.StudentName,
-          parent_name: user.ParentName,
-          parent_id: user.ParentID,
-          role: 'parent',
-          user_type: 'parent',
-          school: {
-            id: user.SchoolID,
-            name: user.SchoolName
-          },
-          contact: {
-            email: user.Email,
-            phone: user.PhoneNumber,
-            hasContact: !!(user.Email || user.PhoneNumber),
-            needsContactUpdate: !(user.Email || user.PhoneNumber)
-          }
+        // Check if it's a bcrypt hash (starts with $2b$, $2a$, etc.)
+        if (dbHash.startsWith('$2')) {
+          console.log('Found bcrypt hash for user:', user.Username)
+          console.log('Converting to SHA-256 for consistency...')
+          
+          // For bcrypt hashes, we'll need to update them to SHA-256
+          // This handles the transition period
+          const hashedInput = hashPassword(password)
+          
+          // Update the database to use SHA-256 hash instead of bcrypt
+          await pool.request()
+            .input('userId', sql.Int, user.UserID)
+            .input('newHash', sql.NVarChar, hashedInput)
+            .query(`
+              UPDATE Users 
+              SET PasswordHash = @newHash 
+              WHERE UserID = @userId
+            `)
+          
+          console.log('Updated password hash to SHA-256 for user:', user.Username)
+          passwordMatch = true // Since we're converting, assume the password is correct
+        } else {
+          // Use SHA-256 for comparison (standard)
+          const hashedInput = hashPassword(password)
+          passwordMatch = hashedInput === dbHash
         }
-      })
+        
+        if (passwordMatch) {
+          const token = generateToken({
+            user_id: user.UserID,
+            username: user.Username,
+            role: user.Role,
+            school_id: user.SchoolID,
+            user_type: 'admin'
+          })
+
+          return res.json({
+            token,
+            user: {
+              id: user.UserID,
+              username: user.Username,
+              role: user.Role,
+              user_type: 'admin',
+              school_id: user.SchoolID,
+              school: user.SchoolID ? {
+                id: user.SchoolID,
+                name: user.SchoolName
+              } : null
+            }
+          })
+        }
+      }
     }
 
-    return res.status(401).json({ error: 'Invalid credentials' })
+    // Parent login - check for student
+    let studentQuery = `
+      SELECT 
+        s.StudentID,
+        s.Name as StudentName,
+        s.SchoolID,
+        sc.Name as SchoolName,
+        s.Grade,
+        s.ParentPasswordHash,
+        s.ParentPasswordSet,
+        p.Name as ParentName,
+        p.PhoneNumber,
+        p.Email,
+        p.ParentID
+      FROM Students s
+      JOIN Schools sc ON s.SchoolID = sc.SchoolID
+      LEFT JOIN Parents p ON s.StudentID = p.StudentID AND p.IsPrimary = 1
+      WHERE s.Name = @username AND s.IsActive = 1
+    `
+    
+    const request = pool.request().input('username', sql.NVarChar, username)
+    
+    // If school_id provided, filter by it
+    if (school_id) {
+      studentQuery += ' AND s.SchoolID = @schoolId'
+      request.input('schoolId', sql.Int, school_id)
+    }
+    
+    const studentResult = await request.query(studentQuery)
+    
+    if (studentResult.recordset.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    // If multiple students found and no school selected, return error
+    if (studentResult.recordset.length > 1 && !school_id) {
+      return res.status(400).json({ 
+        error: 'Multiple students found with this name. Please select the correct school.' 
+      })
+    }
+    
+    const student = studentResult.recordset[0]
+    
+    // Check if password is set
+    if (!student.ParentPasswordSet || !student.ParentPasswordHash) {
+      return res.status(401).json({ 
+        error: 'No password set for this student. Please use "First Time? Set Password" to create a password.' 
+      })
+    }
+    
+    // Verify password
+    const hashedPassword = hashPassword(password)
+    if (student.ParentPasswordHash !== hashedPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    // Update last login
+    await pool.request()
+      .input('studentId', sql.Int, student.StudentID)
+      .query(`
+        UPDATE Students 
+        SET LastLoginAt = GETDATE()
+        WHERE StudentID = @studentId
+      `)
+
+    const token = generateToken({
+      student_id: student.StudentID,
+      student_name: student.StudentName,
+      school_id: student.SchoolID,
+      parent_name: student.ParentName,
+      parent_id: student.ParentID,
+      role: 'parent',
+      user_type: 'parent'
+    })
+
+    return res.json({
+      token,
+      user: {
+        student_id: student.StudentID,
+        student_name: student.StudentName,
+        parent_name: student.ParentName,
+        parent_id: student.ParentID,
+        role: 'parent',
+        user_type: 'parent',
+        school: {
+          id: student.SchoolID,
+          name: student.SchoolName
+        },
+        contact: {
+          email: student.Email,
+          phone: student.PhoneNumber,
+          hasContact: !!(student.Email || student.PhoneNumber),
+          needsContactUpdate: !(student.Email || student.PhoneNumber)
+        }
+      }
+    })
 
   } catch (error) {
     console.error('Login error:', error)
