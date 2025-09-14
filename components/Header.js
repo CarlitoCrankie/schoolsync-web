@@ -28,7 +28,7 @@ export default function Header({ user, onLogout }) {
               <span className="text-white font-bold text-lg">🏫</span>
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">SchoolSync</h1>
+              <h1 className="text-xl font-semibold text-gray-900">DIAMOND ATTENDANCE</h1>
               <p className="text-xs text-gray-500">Multi-School System</p>
             </div>
           </div>

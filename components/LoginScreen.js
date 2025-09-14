@@ -1703,7 +1703,7 @@ const checkForSchoolSelection = async () => {
           <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white text-2xl">🏫</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">SchoolSync</h1>
+          <h1 className="text-2xl font-bold text-gray-900">DIAMOND ATTENDANCE</h1>
           <p className="text-gray-600">Multi-School Attendance System</p>
         </div>
 
