@@ -338,6 +338,8 @@ export default async function handler(req, res) {
       return await handleCheckPasswordStatus(student_name, school_id, res)
     } else if (action === 'set_password') {
       return await handleSetPassword(student_name, school_id, new_password, res)
+    } else if (action === 'reset_password') {
+      return await handleResetPassword(student_name, school_id, new_password, res)
     } else {
       return res.status(400).json({ error: 'Invalid action' })
     }
@@ -613,5 +615,65 @@ async function handleSetPassword(student_name, school_id, new_password, res) {
   } catch (error) {
     console.error('Set password error:', error)
     return res.status(500).json({ error: 'Failed to set password', message: error.message })
+  }
+}
+
+async function handleResetPassword(student_name, school_id, new_password, res) {
+  if (!student_name || !school_id || !new_password) {
+    return res.status(400).json({ error: 'All fields required' })
+  }
+
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  }
+
+  try {
+    const pool = await getPool()
+    
+    // Check if student exists and already has a password set
+    const checkResult = await pool.request()
+      .input('studentName', sql.NVarChar, student_name)
+      .input('schoolId', sql.Int, school_id)
+      .query(`
+        SELECT StudentID, ParentPasswordSet 
+        FROM Students 
+        WHERE Name = @studentName AND SchoolID = @schoolId AND IsActive = 1
+      `)
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ error: 'Student not found' })
+    }
+
+    const student = checkResult.recordset[0]
+    
+    if (!student.ParentPasswordSet) {
+      return res.status(400).json({ 
+        error: 'No password is set for this student. Please use the "First Time?" option instead.' 
+      })
+    }
+
+    // Update the password
+    const updateResult = await pool.request()
+      .input('studentName', sql.NVarChar, student_name)
+      .input('schoolId', sql.Int, school_id)
+      .input('passwordHash', sql.NVarChar, hashPassword(new_password))
+      .query(`
+        UPDATE Students 
+        SET ParentPasswordHash = @passwordHash
+        WHERE Name = @studentName AND SchoolID = @schoolId AND IsActive = 1
+      `)
+
+    if (updateResult.rowsAffected[0] === 0) {
+      return res.status(500).json({ error: 'Failed to update password' })
+    }
+
+    return res.json({ 
+      message: 'Password reset successfully',
+      student_id: student.StudentID
+    })
+
+  } catch (error) {
+    console.error('Reset password error:', error)
+    return res.status(500).json({ error: 'Failed to reset password', message: error.message })
   }
 }

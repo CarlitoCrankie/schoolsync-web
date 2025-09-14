@@ -1173,7 +1173,513 @@ function SchoolSettingsTab({ user }) {
   )
 }
 
-// Enhanced StudentsTab Component
+// // Enhanced StudentsTab Component
+// function StudentsTab({ students, onRefresh, user }) {
+//   const [searchTerm, setSearchTerm] = useState('')
+//   const [filterStatus, setFilterStatus] = useState('all')
+//   const [selectedGrade, setSelectedGrade] = useState('')
+//   const [loading, setLoading] = useState(false)
+//   const [showModal, setShowModal] = useState(false)
+//   const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
+//   const [selectedStudent, setSelectedStudent] = useState(null)
+//   const [grades, setGrades] = useState([])
+  
+//   const [studentForm, setStudentForm] = useState({
+//     name: '',
+//     grade: '',
+//     student_code: '',
+//     parent_password: '',
+//     is_active: true
+//   })
+
+//   // Extract unique grades from students
+//   useEffect(() => {
+//     const uniqueGrades = [...new Set(students.map(s => s.grade).filter(Boolean))].sort()
+//     setGrades(uniqueGrades)
+//   }, [students])
+
+//   const filteredStudents = students.filter(student => {
+//     const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.studentCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+//     const matchesFilter = filterStatus === 'all' ||
+//                          (filterStatus === 'with_password' && (student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'without_password' && !(student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'active' && student.is_active !== false) ||
+//                          (filterStatus === 'inactive' && student.is_active === false)
+    
+//     const matchesGrade = !selectedGrade || student.grade === selectedGrade
+    
+//     return matchesSearch && matchesFilter && matchesGrade
+//   })
+
+//   const resetForm = () => {
+//     setStudentForm({
+//       name: '',
+//       grade: '',
+//       student_code: '',
+//       parent_password: '',
+//       is_active: true
+//     })
+//   }
+
+//   // Modal handlers
+//   const openModal = (type, student = null) => {
+//     setModalType(type)
+//     setSelectedStudent(student)
+    
+//     if (type === 'edit' && student) {
+//       setStudentForm({
+//         name: student.name || '',
+//         grade: student.grade || '',
+//         student_code: student.student_code || student.studentCode || '',
+//         parent_password: '',
+//         is_active: student.is_active !== false
+//       })
+//     } else if (type === 'add') {
+//       resetForm()
+//       if (selectedGrade) {
+//         setStudentForm(prev => ({ ...prev, grade: selectedGrade }))
+//       }
+//     }
+    
+//     setShowModal(true)
+//   }
+
+//   const closeModal = () => {
+//     setShowModal(false)
+//     setModalType('')
+//     setSelectedStudent(null)
+//     resetForm()
+//   }
+
+//   // CRUD operations
+//   const handleSave = async (e) => {
+//     e.preventDefault()
+    
+//     if (!studentForm.name.trim()) {
+//       alert('Student name is required')
+//       return
+//     }
+
+//     setLoading(true)
+    
+//     try {
+//       let response
+      
+//       if (modalType === 'add') {
+//         response = await fetch('/api/students', {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify({
+//             ...studentForm,
+//             school_id: user.school_id || user.SchoolID,
+//             name: studentForm.name.trim()
+//           })
+//         })
+//       } else if (modalType === 'edit') {
+//         response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//           method: 'PUT',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify(studentForm)
+//         })
+//       }
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
+//       } else {
+//         alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error(`${modalType} student error:`, error)
+//       alert(`Failed to ${modalType} student: Network error`)
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   const handleDelete = async (force = false) => {
+//     setLoading(true)
+    
+//     try {
+//       const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//         method: 'DELETE',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify({ force_delete: force })
+//       })
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(result.message || 'Student deleted successfully!')
+//       } else {
+//         alert('Failed to delete student: ' + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error('Delete student error:', error)
+//       alert('Failed to delete student: Network error')
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   return (
+//     <div>
+//       {/* Header */}
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <div>
+//           <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
+//           <p className="text-gray-600 text-sm">
+//             {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
+//             ({filteredStudents.length} of {students.length} total)
+//           </p>
+//         </div>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <button 
+//             onClick={onRefresh} 
+//             disabled={loading}
+//             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
+//           >
+//             {loading ? 'Loading...' : 'Refresh'}
+//           </button>
+//           <button 
+//             onClick={() => openModal('add')}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+//           >
+//             Add Student
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Filters */}
+//       <div className="flex flex-col sm:flex-row gap-4 mb-6">
+//         <div className="flex-1">
+//           <input
+//             type="text"
+//             placeholder="Search by name or student code..."
+//             value={searchTerm}
+//             onChange={(e) => setSearchTerm(e.target.value)}
+//             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+//           />
+//         </div>
+        
+//         {/* Grade Filter */}
+//         {grades.length > 0 && (
+//           <select
+//             value={selectedGrade}
+//             onChange={(e) => setSelectedGrade(e.target.value)}
+//             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//           >
+//             <option value="">All Grades</option>
+//             {grades.map((grade) => (
+//               <option key={grade} value={grade}>
+//                 Grade {grade}
+//               </option>
+//             ))}
+//           </select>
+//         )}
+        
+//         <select
+//           value={filterStatus}
+//           onChange={(e) => setFilterStatus(e.target.value)}
+//           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//         >
+//           <option value="all">All Students</option>
+//           <option value="active">Active Students</option>
+//           <option value="inactive">Inactive Students</option>
+//           <option value="with_password">With Parent Password</option>
+//           <option value="without_password">Need Parent Setup</option>
+//         </select>
+//       </div>
+
+//       {/* Students Table */}
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <table className="min-w-full divide-y divide-gray-200">
+//             <thead className="bg-gray-50">
+//               <tr>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Student
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Grade
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                   Student Code
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Status
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Actions
+//                 </th>
+//               </tr>
+//             </thead>
+//             <tbody className="bg-white divide-y divide-gray-200">
+//               {filteredStudents.length > 0 ? filteredStudents.map((student) => (
+//                 <tr key={student.id || student.student_id}>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
+//                     <div className="text-xs text-gray-500">ID: {student.id || student.student_id}</div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm text-gray-500">{student.grade || 'Not set'}</div>
+//                     <div className="text-xs text-gray-500">
+//                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                         (student.parentPasswordSet || student.parent_password_set) ? 
+//                         'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+//                       }`}>
+//                         {(student.parentPasswordSet || student.parent_password_set) ? 'Parent OK' : 'Setup needed'}
+//                       </span>
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
+//                     <div className="text-sm font-mono text-gray-900">
+//                       {student.studentCode || student.student_code || 'Not set'}
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                       student.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+//                     }`}>
+//                       {student.is_active !== false ? 'Active' : 'Inactive'}
+//                     </span>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+//                     <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+//                       <button 
+//                         onClick={() => openModal('view', student)}
+//                         className="text-blue-600 hover:text-blue-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         View
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('edit', student)}
+//                         className="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Edit
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('delete', student)}
+//                         className="text-red-600 hover:text-red-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Delete
+//                       </button>
+//                     </div>
+//                   </td>
+//                 </tr>
+//               )) : (
+//                 <tr>
+//                   <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+//                     {selectedGrade ? `No students found in Grade ${selectedGrade}` : 'No students found'}
+//                   </td>
+//                 </tr>
+//               )}
+//             </tbody>
+//           </table>
+//         </div>
+//       </div>
+
+//       {/* Grade Summary Cards */}
+//       {grades.length > 0 && (
+//         <div className="mt-6 bg-white p-4 rounded-lg shadow border">
+//           <h4 className="text-md font-medium text-gray-900 mb-3">Grade Distribution</h4>
+//           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+//             {grades.map((grade) => (
+//               <div 
+//                 key={grade}
+//                 className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
+//                   selectedGrade === grade 
+//                     ? 'bg-blue-100 border-2 border-blue-500' 
+//                     : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+//                 }`}
+//                 onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
+//               >
+//                 <div className="text-sm font-bold text-gray-900">Grade {grade}</div>
+//                 <div className="text-xs text-gray-600">
+//                   {students.filter(s => s.grade === grade).length} students
+//                 </div>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Modal */}
+//       {showModal && (
+//         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+//           <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+//             <div className="flex justify-between items-center mb-4">
+//               <h4 className="text-lg font-semibold text-gray-900">
+//                 {modalType === 'add' && 'Add New Student'}
+//                 {modalType === 'edit' && 'Edit Student'}
+//                 {modalType === 'delete' && 'Delete Student'}
+//                 {modalType === 'view' && 'Student Details'}
+//               </h4>
+//               <button
+//                 onClick={closeModal}
+//                 className="text-gray-400 hover:text-gray-600"
+//               >
+//                 ✕
+//               </button>
+//             </div>
+
+//             {/* Modal Content */}
+//             {(modalType === 'add' || modalType === 'edit') && (
+//               <form onSubmit={handleSave} className="space-y-4">
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Name *
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.name}
+//                     onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Enter full name"
+//                     required
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Grade
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.grade}
+//                     onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="e.g., 10th, Grade 5"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Code
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.student_code}
+//                     onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Optional unique code"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Parent Password
+//                   </label>
+//                   <input
+//                     type="password"
+//                     value={studentForm.parent_password}
+//                     onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
+//                   />
+//                 </div>
+
+//                 <div className="flex items-center">
+//                   <input
+//                     type="checkbox"
+//                     checked={studentForm.is_active}
+//                     onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+//                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+//                   />
+//                   <label className="ml-2 block text-sm text-gray-900">Active</label>
+//                 </div>
+
+//                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
+//                   <button
+//                     type="submit"
+//                     disabled={loading}
+//                     className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+//                   >
+//                     {loading ? (modalType === 'add' ? 'Adding...' : 'Updating...') : (modalType === 'add' ? 'Add Student' : 'Update Student')}
+//                   </button>
+//                   <button
+//                     type="button"
+//                     onClick={closeModal}
+//                     disabled={loading}
+//                     className="w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                 </div>
+//               </form>
+//             )}
+
+//             {modalType === 'view' && selectedStudent && (
+//               <div className="space-y-3">
+//                 <p><strong>Name:</strong> {selectedStudent.name}</p>
+//                 <p><strong>Student ID:</strong> {selectedStudent.id || selectedStudent.student_id}</p>
+//                 <p><strong>Grade:</strong> {selectedStudent.grade || 'Not set'}</p>
+//                 <p><strong>Student Code:</strong> {selectedStudent.student_code || selectedStudent.studentCode || 'Not set'}</p>
+//                 <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
+//                 <p><strong>Parent Password:</strong> {(selectedStudent.parentPasswordSet || selectedStudent.parent_password_set) ? 'Set' : 'Not set'}</p>
+//                 <p><strong>Last Activity:</strong> {
+//                   selectedStudent.last_activity 
+//                     ? new Date(selectedStudent.last_activity).toLocaleString()
+//                     : 'No activity'
+//                 }</p>
+//                 <div className="flex justify-end mt-6">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Close
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+
+//             {modalType === 'delete' && selectedStudent && (
+//               <div>
+//                 <p className="text-gray-700 mb-4">
+//                   Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
+//                 </p>
+//                 <div className="flex justify-end space-x-3">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(false)}
+//                     className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Deactivate'}
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(true)}
+//                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Force Delete'}
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+
 function StudentsTab({ students, onRefresh, user }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -1191,6 +1697,18 @@ function StudentsTab({ students, onRefresh, user }) {
     parent_password: '',
     is_active: true
   })
+
+  const [showPasswords, setShowPasswords] = useState({
+    addPassword: false,
+    editPassword: false
+  })
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }))
+  }
 
   // Extract unique grades from students
   useEffect(() => {
@@ -1252,6 +1770,10 @@ function StudentsTab({ students, onRefresh, user }) {
     setModalType('')
     setSelectedStudent(null)
     resetForm()
+    setShowPasswords({
+    addPassword: false,
+    editPassword: false
+  })
   }
 
   // CRUD operations
@@ -1581,13 +2103,31 @@ function StudentsTab({ students, onRefresh, user }) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Parent Password
                   </label>
-                  <input
-                    type="password"
-                    value={studentForm.parent_password}
-                    onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? "text" : "password"}
+                      value={studentForm.parent_password}
+                      onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility(modalType === 'add' ? 'addPassword' : 'editPassword')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center">
@@ -1679,537 +2219,6 @@ function StudentsTab({ students, onRefresh, user }) {
     </div>
   )
 }
-
-// function StudentsTab({ schoolId }) {
-//   const [students, setStudents] = useState([])
-//   const [grades, setGrades] = useState([])
-//   const [selectedGrade, setSelectedGrade] = useState('')
-//   const [loading, setLoading] = useState(true)
-//   const [error, setError] = useState(null)
-//   const [showModal, setShowModal] = useState(false)
-//   const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
-//   const [selectedStudent, setSelectedStudent] = useState(null)
-//   const [formData, setFormData] = useState({
-//     name: '',
-//     grade: '',
-//     student_code: '',
-//     parent_password: '',
-//     is_active: true
-//   })
-
-//   useEffect(() => {
-//     loadStudents()
-//     loadGrades()
-//   }, [schoolId])
-
-//   useEffect(() => {
-//     if (selectedGrade !== '') {
-//       filterStudentsByGrade()
-//     } else {
-//       loadStudents()
-//     }
-//   }, [selectedGrade])
-
-//   const loadStudents = async () => {
-//     try {
-//       setLoading(true)
-//       const response = await fetch(`/api/students?school_id=${schoolId}${selectedGrade ? `&grade=${selectedGrade}` : ''}`)
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         // Handle both old and new API response formats
-//         setStudents(result.students || result.data || [])
-//       } else {
-//         setError(result.error || 'Failed to load students')
-//       }
-//     } catch (err) {
-//       setError('Failed to load students')
-//       console.error('Error loading students:', err)
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   const loadGrades = async () => {
-//     try {
-//       const response = await fetch(`/api/students?school_id=${schoolId}&type=grades`)
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         setGrades(result.grades || [])
-//       }
-//     } catch (err) {
-//       console.error('Error loading grades:', err)
-//     }
-//   }
-
-//   const filterStudentsByGrade = () => {
-//     loadStudents()
-//   }
-
-//   // Modal handlers
-//   const openModal = (type, student = null) => {
-//     setModalType(type)
-//     setSelectedStudent(student)
-    
-//     if (type === 'edit' && student) {
-//       setFormData({
-//         name: student.name || '',
-//         grade: student.grade || '',
-//         student_code: student.student_code || '',
-//         parent_password: '',
-//         is_active: student.is_active !== false
-//       })
-//     } else if (type === 'add') {
-//       setFormData({
-//         name: '',
-//         grade: selectedGrade || '',
-//         student_code: '',
-//         parent_password: '',
-//         is_active: true
-//       })
-//     }
-    
-//     setShowModal(true)
-//   }
-
-//   const closeModal = () => {
-//     setShowModal(false)
-//     setModalType('')
-//     setSelectedStudent(null)
-//     setFormData({
-//       name: '',
-//       grade: '',
-//       student_code: '',
-//       parent_password: '',
-//       is_active: true
-//     })
-//   }
-
-//   // CRUD operations
-//   const handleSave = async (e) => {
-//     e.preventDefault()
-//     try {
-//       let response
-      
-//       if (modalType === 'add') {
-//         response = await fetch('/api/students', {
-//           method: 'POST',
-//           headers: {
-//             'Content-Type': 'application/json',
-//           },
-//           body: JSON.stringify({
-//             ...formData,
-//             school_id: schoolId
-//           })
-//         })
-//       } else if (modalType === 'edit') {
-//         response = await fetch(`/api/students?student_id=${selectedStudent.student_id}`, {
-//           method: 'PUT',
-//           headers: {
-//             'Content-Type': 'application/json',
-//           },
-//           body: JSON.stringify(formData)
-//         })
-//       }
-
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         await loadStudents()
-//         closeModal()
-//         setError(null)
-//       } else {
-//         setError(result.error || 'Operation failed')
-//       }
-//     } catch (err) {
-//       setError('Operation failed')
-//       console.error('Error saving student:', err)
-//     }
-//   }
-
-//   const handleDelete = async (force = false) => {
-//     try {
-//       const response = await fetch(`/api/students?student_id=${selectedStudent.student_id}`, {
-//         method: 'DELETE',
-//         headers: {
-//           'Content-Type': 'application/json',
-//         },
-//         body: JSON.stringify({
-//           force_delete: force
-//         })
-//       })
-
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         await loadStudents()
-//         closeModal()
-//         setError(null)
-//       } else {
-//         setError(result.error || 'Delete failed')
-//       }
-//     } catch (err) {
-//       setError('Delete failed')
-//       console.error('Error deleting student:', err)
-//     }
-//   }
-
-//   if (loading) {
-//     return (
-//       <div className="flex items-center justify-center h-64">
-//         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-//         <span className="ml-3">Loading students...</span>
-//       </div>
-//     )
-//   }
-
-//   return (
-//     <div className="space-y-6">
-//       {/* Header with Grade Filter */}
-//       <div className="bg-white p-6 rounded-lg shadow border">
-//         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-//           <div>
-//             <h2 className="text-xl font-semibold text-gray-900">Students Management</h2>
-//             <p className="text-gray-600 mt-1">
-//               {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
-//               ({students.length} total)
-//             </p>
-//           </div>
-          
-//           {/* Controls */}
-//           <div className="flex items-center space-x-4">
-//             <div className="min-w-[200px]">
-//               <label htmlFor="grade-filter" className="block text-sm font-medium text-gray-700 mb-1">
-//                 Filter by Grade
-//               </label>
-//               <select
-//                 id="grade-filter"
-//                 value={selectedGrade}
-//                 onChange={(e) => setSelectedGrade(e.target.value)}
-//                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-//               >
-//                 <option value="">All Grades</option>
-//                 {grades.map((grade) => (
-//                   <option key={grade} value={grade}>
-//                     Grade {grade}
-//                   </option>
-//                 ))}
-//               </select>
-//             </div>
-            
-//             <button
-//               onClick={() => openModal('add')}
-//               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
-//             >
-//               Add Student
-//             </button>
-            
-//             <button
-//               onClick={loadStudents}
-//               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-//             >
-//               Refresh
-//             </button>
-//           </div>
-//         </div>
-//       </div>
-
-//       {error && (
-//         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-//           <p className="text-red-700">{error}</p>
-//           <button
-//             onClick={() => setError(null)}
-//             className="text-red-500 hover:text-red-700 text-sm mt-2"
-//           >
-//             Dismiss
-//           </button>
-//         </div>
-//       )}
-
-//       {/* Students Table */}
-//       <div className="bg-white rounded-lg shadow border overflow-hidden">
-//         <div className="overflow-x-auto">
-//           <table className="min-w-full divide-y divide-gray-200">
-//             <thead className="bg-gray-50">
-//               <tr>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Student
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Grade
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Status
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Last Activity
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Actions
-//                 </th>
-//               </tr>
-//             </thead>
-//             <tbody className="bg-white divide-y divide-gray-200">
-//               {students.length > 0 ? (
-//                 students.map((student) => (
-//                   <tr key={student.id || student.student_id} className="hover:bg-gray-50">
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <div className="flex items-center">
-//                         <div>
-//                           <div className="text-sm font-medium text-gray-900">
-//                             {student.name}
-//                           </div>
-//                           <div className="text-sm text-gray-500">
-//                             ID: {student.student_id}
-//                             {student.student_code && ` | Code: ${student.student_code}`}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     </td>
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-//                         Grade {student.grade}
-//                       </span>
-//                     </td>
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-//                         student.is_active !== false
-//                           ? 'bg-green-100 text-green-800' 
-//                           : 'bg-red-100 text-red-800'
-//                       }`}>
-//                         {student.is_active !== false ? 'Active' : 'Inactive'}
-//                       </span>
-//                     </td>
-//                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-//                       {student.last_activity 
-//                         ? new Date(student.last_activity).toLocaleDateString()
-//                         : 'No activity'
-//                       }
-//                     </td>
-//                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-//                       <button 
-//                         onClick={() => openModal('view', student)}
-//                         className="text-blue-600 hover:text-blue-900 mr-3"
-//                       >
-//                         View
-//                       </button>
-//                       <button 
-//                         onClick={() => openModal('edit', student)}
-//                         className="text-indigo-600 hover:text-indigo-900 mr-3"
-//                       >
-//                         Edit
-//                       </button>
-//                       <button 
-//                         onClick={() => openModal('delete', student)}
-//                         className="text-red-600 hover:text-red-900"
-//                       >
-//                         Delete
-//                       </button>
-//                     </td>
-//                   </tr>
-//                 ))
-//               ) : (
-//                 <tr>
-//                   <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
-//                     {selectedGrade 
-//                       ? `No students found in Grade ${selectedGrade}`
-//                       : 'No students found'
-//                     }
-//                   </td>
-//                 </tr>
-//               )}
-//             </tbody>
-//           </table>
-//         </div>
-//       </div>
-
-//       {/* Grade Summary */}
-//       {grades.length > 0 && (
-//         <div className="bg-white p-6 rounded-lg shadow border">
-//           <h3 className="text-lg font-medium text-gray-900 mb-4">Grade Distribution</h3>
-//           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-//             {grades.map((grade) => (
-//               <div 
-//                 key={grade}
-//                 className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
-//                   selectedGrade === grade 
-//                     ? 'bg-blue-100 border-2 border-blue-500' 
-//                     : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-//                 }`}
-//                 onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
-//               >
-//                 <div className="text-lg font-bold text-gray-900">Grade {grade}</div>
-//                 <div className="text-sm text-gray-600">
-//                   {students.filter(s => s.grade === grade).length} students
-//                 </div>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Modal */}
-//       {showModal && (
-//         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-//           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-//             <div className="mt-3">
-//               {/* Modal Header */}
-//               <div className="flex justify-between items-center mb-4">
-//                 <h3 className="text-lg font-medium text-gray-900">
-//                   {modalType === 'add' && 'Add New Student'}
-//                   {modalType === 'edit' && 'Edit Student'}
-//                   {modalType === 'delete' && 'Delete Student'}
-//                   {modalType === 'view' && 'Student Details'}
-//                 </h3>
-//                 <button
-//                   onClick={closeModal}
-//                   className="text-gray-400 hover:text-gray-600"
-//                 >
-//                   ✕
-//                 </button>
-//               </div>
-
-//               {/* Modal Content */}
-//               {(modalType === 'add' || modalType === 'edit') && (
-//                 <form onSubmit={handleSave}>
-//                   <div className="space-y-4">
-//                     <div>
-//                       <label className="block text-sm font-medium text-gray-700">Name</label>
-//                       <input
-//                         type="text"
-//                         value={formData.name}
-//                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-//                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-//                         required
-//                       />
-//                     </div>
-//                     <div>
-//                       <label className="block text-sm font-medium text-gray-700">Grade</label>
-//                       <input
-//                         type="text"
-//                         value={formData.grade}
-//                         onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-//                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-//                       />
-//                     </div>
-//                     <div>
-//                       <label className="block text-sm font-medium text-gray-700">Student Code</label>
-//                       <input
-//                         type="text"
-//                         value={formData.student_code}
-//                         onChange={(e) => setFormData({ ...formData, student_code: e.target.value })}
-//                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-//                       />
-//                     </div>
-//                     <div>
-//                       <label className="block text-sm font-medium text-gray-700">Parent Password</label>
-//                       <input
-//                         type="password"
-//                         value={formData.parent_password}
-//                         onChange={(e) => setFormData({ ...formData, parent_password: e.target.value })}
-//                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-//                         placeholder={modalType === 'edit' ? 'Leave blank to keep current' : ''}
-//                       />
-//                     </div>
-//                     <div className="flex items-center">
-//                       <input
-//                         type="checkbox"
-//                         checked={formData.is_active}
-//                         onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-//                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-//                       />
-//                       <label className="ml-2 block text-sm text-gray-900">Active</label>
-//                     </div>
-//                   </div>
-//                   <div className="flex justify-end space-x-3 mt-6">
-//                     <button
-//                       type="button"
-//                       onClick={closeModal}
-//                       className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
-//                     >
-//                       Cancel
-//                     </button>
-//                     <button
-//                       type="submit"
-//                       className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                     >
-//                       {modalType === 'add' ? 'Add Student' : 'Update Student'}
-//                     </button>
-//                   </div>
-//                 </form>
-//               )}
-
-//               {modalType === 'view' && selectedStudent && (
-//                 <div className="space-y-3">
-//                   <p><strong>Name:</strong> {selectedStudent.name}</p>
-//                   <p><strong>Student ID:</strong> {selectedStudent.student_id}</p>
-//                   <p><strong>Grade:</strong> {selectedStudent.grade}</p>
-//                   <p><strong>Student Code:</strong> {selectedStudent.student_code || 'Not set'}</p>
-//                   <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
-//                   <p><strong>Last Activity:</strong> {
-//                     selectedStudent.last_activity 
-//                       ? new Date(selectedStudent.last_activity).toLocaleString()
-//                       : 'No activity'
-//                   }</p>
-//                   <p><strong>Attendance Records:</strong> {selectedStudent.total_attendance_records || 0}</p>
-//                   <div className="flex justify-end mt-6">
-//                     <button
-//                       onClick={closeModal}
-//                       className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-//                     >
-//                       Close
-//                     </button>
-//                   </div>
-//                 </div>
-//               )}
-
-//               {modalType === 'delete' && selectedStudent && (
-//                 <div>
-//                   <p className="text-gray-700 mb-4">
-//                     Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
-//                   </p>
-//                   {selectedStudent.total_attendance_records > 0 && (
-//                     <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
-//                       <p className="text-sm text-yellow-800">
-//                         This student has {selectedStudent.total_attendance_records} attendance records.
-//                         Deleting will deactivate the student by default.
-//                       </p>
-//                     </div>
-//                   )}
-//                   <div className="flex justify-end space-x-3">
-//                     <button
-//                       onClick={closeModal}
-//                       className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-//                     >
-//                       Cancel
-//                     </button>
-//                     <button
-//                       onClick={() => handleDelete(false)}
-//                       className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
-//                     >
-//                       Deactivate
-//                     </button>
-//                     {selectedStudent.total_attendance_records > 0 && (
-//                       <button
-//                         onClick={() => handleDelete(true)}
-//                         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-//                       >
-//                         Force Delete
-//                       </button>
-//                     )}
-//                   </div>
-//                 </div>
-//               )}
-//             </div>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   )
-// }
-
-// UploadStudentsTab Component
 
 function UploadStudentsTab({ user, onUploadComplete }) {
   const [file, setFile] = useState(null)
@@ -2334,8 +2343,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
   )
 }
 
-// AttendanceTabMobileResponsive Component
-
+//AttendanceTabMobileResponsive Component
 // function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
 //   const [dateRange, setDateRange] = useState({
 //     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -2346,13 +2354,95 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //   const [loading, setLoading] = useState(false)
 //   const [error, setError] = useState(null)
 //   const [statusFilter, setStatusFilter] = useState('all')
+//   const [gradeFilter, setGradeFilter] = useState('') // New grade filter
+//   const [availableGrades, setAvailableGrades] = useState([]) // Available grades
 
 //   useEffect(() => {
 //     setAttendanceData(attendance)
 //     loadTimeSettings()
+//     loadAvailableGrades()
 //   }, [attendance])
+  
+// // Add this function inside your AttendanceTabMobileResponsive component
+//   const exportToExcel = async () => {
+//     if (!filteredData.length) {
+//       alert('No data to export')
+//       return
+//     }
 
-//   // Load school time settings
+//     try {
+//       // Prepare the data for export
+//       const exportData = filteredData.map(record => ({
+//         'Student Name': record.studentName || record.student_name || 'Unknown Student',
+//         'Grade': record.grade || 'N/A',
+//         'Status': record.status === 'IN' ? 'Check In' : record.status === 'OUT' ? 'Check Out' : record.status || 'Unknown',
+//         'Enhanced Status': record.statusLabel || (record.status === 'IN' ? 'Check In' : 'Check Out'),
+//         'Date': formatDate(record.scan_time || record.time || record.created_at),
+//         'Time': formatTime(record.scan_time || record.time || record.created_at),
+//         'School': record.school_name || (isCompanyAdmin ? 'Unknown School' : user?.school?.name || 'School'),
+//         'Notes': record.message || '',
+//         'Raw Timestamp': record.scan_time || record.time || record.created_at
+//       }))
+
+//       // Create filename with current filters
+//       const now = new Date()
+//       const timestamp = now.toISOString().split('T')[0]
+//       let filename = `attendance-report-${timestamp}`
+      
+//       // Add filter info to filename
+//       if (statusFilter !== 'all') {
+//         filename += `-${statusFilter}`
+//       }
+//       if (gradeFilter) {
+//         filename += `-grade-${gradeFilter}`
+//       }
+//       if (dateRange.from === dateRange.to) {
+//         filename += `-${dateRange.from}`
+//       } else {
+//         filename += `-${dateRange.from}-to-${dateRange.to}`
+//       }
+
+//       // Create Excel content using a simple CSV approach that Excel can read
+//       const headers = Object.keys(exportData[0])
+//       const csvContent = [
+//         // Add title row
+//         [`Attendance Report - ${isCompanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
+//         [`Generated: ${now.toLocaleString()}`],
+//         [`Date Range: ${dateRange.from} to ${dateRange.to}`],
+//         [`Filters: Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
+//         [`Total Records: ${filteredData.length}`],
+//         [], // Empty row
+//         headers, // Column headers
+//         ...exportData.map(row => headers.map(header => row[header] || ''))
+//       ].map(row => 
+//         row.map(cell => 
+//           typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
+//             ? `"${cell.replace(/"/g, '""')}"` 
+//             : cell
+//         ).join(',')
+//       ).join('\n')
+
+//       // Create and download the file
+//       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+//       const link = document.createElement('a')
+//       const url = URL.createObjectURL(blob)
+//       link.setAttribute('href', url)
+//       link.setAttribute('download', `${filename}.csv`)
+//       link.style.visibility = 'hidden'
+//       document.body.appendChild(link)
+//       link.click()
+//       document.body.removeChild(link)
+//       URL.revokeObjectURL(url)
+
+//       // Show success message
+//       alert(`Exported ${filteredData.length} attendance records to ${filename}.csv`)
+
+//     } catch (error) {
+//       console.error('Export error:', error)
+//       alert('Failed to export attendance data. Please try again.')
+//     }
+//   }
+
 //   const loadTimeSettings = async () => {
 //     try {
 //       const schoolId = user?.school_id || user?.SchoolID
@@ -2366,6 +2456,22 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //       }
 //     } catch (error) {
 //       console.error('Error loading time settings:', error)
+//     }
+//   }
+
+//   const loadAvailableGrades = async () => {
+//     try {
+//       const schoolId = user?.school_id || user?.SchoolID
+//       if (!schoolId) return
+
+//       const response = await fetch(`/api/students?school_id=${schoolId}&type=grades`)
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         setAvailableGrades(result.grades || [])
+//       }
+//     } catch (error) {
+//       console.error('Error loading grades:', error)
 //     }
 //   }
 
@@ -2389,6 +2495,11 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //         params.append('school_id', user.school_id || user.SchoolID)
 //       }
 
+//       // Add grade filter if selected
+//       if (gradeFilter) {
+//         params.append('grade', gradeFilter)
+//       }
+
 //       const response = await fetch(`/api/analytics?${params}`)
       
 //       if (!response.ok) {
@@ -2403,20 +2514,18 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //             id: record.attendance_id,
 //             studentName: record.student_name,
 //             student_name: record.student_name,
+//             grade: record.grade, // Include grade information
 //             status: record.status,
 //             time: record.scan_time,
 //             scan_time: record.scan_time,
-//             scanTime: record.scan_time, // For utils compatibility
+//             scanTime: record.scan_time,
 //             created_at: record.created_at,
 //             school_name: record.school_name,
 //             school_id: record.school_id,
-//             badge_number: record.badge_number
+//             statusLabel: record.statusLabel,
+//             statusType: record.statusType,
+//             message: record.message
 //           }))
-          
-//           // Enhance with time settings if available
-//           if (timeSettings) {
-//             formattedData = enhanceAttendanceWithTimeSettings(formattedData, timeSettings)
-//           }
           
 //           formattedData.sort((a, b) => {
 //             const timeA = new Date(a.scan_time || a.created_at)
@@ -2445,23 +2554,24 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //     if (dateRange.from && dateRange.to) {
 //       refreshAttendance()
 //     }
-//   }, [dateRange.from, dateRange.to, timeSettings])
+//   }, [dateRange.from, dateRange.to, gradeFilter]) // Refresh when grade filter changes
 
-//   // Filter data based on status filter
-//   const filteredData = statusFilter === 'all' 
-//     ? attendanceData 
-//     : attendanceData.filter(record => {
-//         switch (statusFilter) {
-//           case 'late':
-//             return record.statusType === 'late'
-//           case 'on-time':
-//             return record.statusType === 'on-time' || record.statusType === 'early-arrival'
-//           case 'early-departure':
-//             return record.statusType === 'early-departure'
-//           default:
-//             return true
-//         }
-//       })
+//   // Filter data based on status and grade filters
+//   const filteredData = attendanceData.filter(record => {
+//     // Status filter
+//     const statusMatch = statusFilter === 'all' || (
+//       timeSettings && (
+//         (statusFilter === 'late' && record.statusType === 'late') ||
+//         (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
+//         (statusFilter === 'early-departure' && record.statusType === 'early-departure')
+//       )
+//     )
+
+//     // Grade filter
+//     const gradeMatch = !gradeFilter || record.grade === gradeFilter
+
+//     return statusMatch && gradeMatch
+//   })
 
 //   // Get status counts for filter buttons
 //   const getStatusCounts = () => {
@@ -2470,12 +2580,12 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //     }
 
 //     return {
-//       all: attendanceData.length,
-//       late: attendanceData.filter(r => r.statusType === 'late').length,
-//       'on-time': attendanceData.filter(r => 
+//       all: filteredData.length,
+//       late: filteredData.filter(r => r.statusType === 'late').length,
+//       'on-time': filteredData.filter(r => 
 //         r.statusType === 'on-time' || r.statusType === 'early-arrival'
 //       ).length,
-//       'early-departure': attendanceData.filter(r => r.statusType === 'early-departure').length
+//       'early-departure': filteredData.filter(r => r.statusType === 'early-departure').length
 //     }
 //   }
 
@@ -2547,53 +2657,80 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //         </div>
 //       </div>
 
-//       {/* Status Filter Buttons */}
-//       {timeSettings && statusCounts.all > 0 && (
-//         <div className="mb-4 bg-white p-4 rounded-lg shadow border">
-//           <div className="flex flex-wrap gap-2">
-//             <button
-//               onClick={() => setStatusFilter('all')}
-//               className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                 statusFilter === 'all' 
-//                   ? 'bg-blue-100 text-blue-800' 
-//                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//               }`}
+//       {/* Enhanced Filter Section with Grade Filter */}
+//       <div className="mb-4 bg-white p-4 rounded-lg shadow border space-y-4">
+//         {/* Grade Filter */}
+//         {availableGrades.length > 0 && (
+//           <div>
+//             <label className="block text-sm font-medium text-gray-700 mb-2">
+//               Filter by Grade
+//             </label>
+//             <select
+//               value={gradeFilter}
+//               onChange={(e) => setGradeFilter(e.target.value)}
+//               className="block w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
 //             >
-//               All ({statusCounts.all})
-//             </button>
-//             <button
-//               onClick={() => setStatusFilter('on-time')}
-//               className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                 statusFilter === 'on-time' 
-//                   ? 'bg-green-100 text-green-800' 
-//                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//               }`}
-//             >
-//               🟢 On Time ({statusCounts['on-time']})
-//             </button>
-//             <button
-//               onClick={() => setStatusFilter('late')}
-//               className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                 statusFilter === 'late' 
-//                   ? 'bg-red-100 text-red-800' 
-//                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//               }`}
-//             >
-//               🔴 Late ({statusCounts.late})
-//             </button>
-//             <button
-//               onClick={() => setStatusFilter('early-departure')}
-//               className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                 statusFilter === 'early-departure' 
-//                   ? 'bg-orange-100 text-orange-800' 
-//                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//               }`}
-//             >
-//               🟠 Early Out ({statusCounts['early-departure']})
-//             </button>
+//               <option value="">All Grades</option>
+//               {availableGrades.map((grade) => (
+//                 <option key={grade} value={grade}>
+//                   Grade {grade}
+//                 </option>
+//               ))}
+//             </select>
 //           </div>
-//         </div>
-//       )}
+//         )}
+
+//         {/* Status Filter Buttons */}
+//         {timeSettings && statusCounts.all > 0 && (
+//           <div>
+//             <label className="block text-sm font-medium text-gray-700 mb-2">
+//               Filter by Status
+//             </label>
+//             <div className="flex flex-wrap gap-2">
+//               <button
+//                 onClick={() => setStatusFilter('all')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'all' 
+//                     ? 'bg-blue-100 text-blue-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 All ({statusCounts.all})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('on-time')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'on-time' 
+//                     ? 'bg-green-100 text-green-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🟢 On Time ({statusCounts['on-time']})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('late')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'late' 
+//                     ? 'bg-red-100 text-red-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🔴 Late ({statusCounts.late})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('early-departure')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'early-departure' 
+//                     ? 'bg-orange-100 text-orange-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🟠 Early Out ({statusCounts['early-departure']})
+//               </button>
+//             </div>
+//           </div>
+//         )}
+//       </div>
 
 //       {error && (
 //         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
@@ -2601,6 +2738,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //         </div>
 //       )}
 
+//       {/* Rest of your existing table code remains the same */}
 //       <div className="overflow-x-auto -mx-4 sm:mx-0">
 //         <div className="inline-block min-w-full align-middle">
 //           <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -2609,6 +2747,9 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //                 <tr>
 //                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 //                     Student
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Grade
 //                   </th>
 //                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 //                     Status
@@ -2622,11 +2763,6 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //                   {isCompanyAdmin && (
 //                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
 //                       School
-//                     </th>
-//                   )}
-//                   {timeSettings && (
-//                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-//                       Notes
 //                     </th>
 //                   )}
 //                 </tr>
@@ -2643,10 +2779,12 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //                           <div className="sm:hidden">
 //                             {formatTime(record.scan_time || record.time || record.created_at)}
 //                           </div>
-//                           {record.badge_number && (
-//                             <div>Badge: {record.badge_number}</div>
-//                           )}
 //                         </div>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+//                           {record.grade ? `Grade ${record.grade}` : 'N/A'}
+//                         </span>
 //                       </td>
 //                       <td className="px-3 sm:px-6 py-4">
 //                         <div className="space-y-1">
@@ -2685,16 +2823,11 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //                           {record.school_name || 'Unknown School'}
 //                         </td>
 //                       )}
-//                       {timeSettings && (
-//                         <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden lg:table-cell">
-//                           {record.message || '—'}
-//                         </td>
-//                       )}
 //                     </tr>
 //                   ))
 //                 ) : (
 //                   <tr>
-//                     <td colSpan={isCompanyAdmin ? (timeSettings ? "6" : "5") : (timeSettings ? "5" : "4")} className="px-6 py-12 text-center">
+//                     <td colSpan={isCompanyAdmin ? "6" : "5"} className="px-6 py-12 text-center">
 //                       <div className="text-gray-500">
 //                         {loading ? (
 //                           <div className="flex items-center justify-center">
@@ -2708,7 +2841,8 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //                           <div>
 //                             <div className="text-gray-400 text-4xl mb-2">📊</div>
 //                             <p className="font-medium">
-//                               {statusFilter === 'all' ? 'No attendance records found' : `No ${statusFilter.replace('-', ' ')} records found`}
+//                               {statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
+//                                `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`}
 //                             </p>
 //                             <p className="text-sm mt-1">
 //                               {dateRange.from === dateRange.to ? 
@@ -2731,520 +2865,14 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 //         {filteredData && filteredData.length > 0 && (
 //           <div className="mt-4 text-sm text-gray-600 text-center">
 //             Showing {Math.min(50, filteredData.length)} of {filteredData.length} records
-//             {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
+//             {(statusFilter !== 'all' || gradeFilter) && (
+//               <span className="block mt-1 text-xs">
+//                 Filtered by: {statusFilter !== 'all' && statusFilter.replace('-', ' ')}{statusFilter !== 'all' && gradeFilter && ' and '}{gradeFilter && `Grade ${gradeFilter}`}
+//               </span>
+//             )}
 //             {filteredData.length > 50 && (
 //               <span className="block mt-1 text-xs">
 //                 Only showing first 50 records. Use date filters to narrow results.
-//               </span>
-//             )}
-//           </div>
-//         )}
-//       </div>
-//     </div>
-//   )
-// }
-
-// function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
-//   const [dateRange, setDateRange] = useState({
-//     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-//     to: new Date().toISOString().split('T')[0]
-//   })
-//   const [attendanceData, setAttendanceData] = useState(attendance)
-//   const [timeSettings, setTimeSettings] = useState(null)
-//   const [loading, setLoading] = useState(false)
-//   const [error, setError] = useState(null)
-//   const [statusFilter, setStatusFilter] = useState('all')
-//   const [gradeFilter, setGradeFilter] = useState('all') // NEW: Grade filter
-//   const [exporting, setExporting] = useState(false) // NEW: Export state
-
-//   useEffect(() => {
-//     setAttendanceData(attendance)
-//     loadTimeSettings()
-//   }, [attendance])
-
-//   // Load school time settings
-//   const loadTimeSettings = async () => {
-//     try {
-//       const schoolId = user?.school_id || user?.SchoolID
-//       if (!schoolId) return
-
-//       const response = await fetch(`/api/school-settings?school_id=${schoolId}&type=time`)
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         setTimeSettings(result.settings)
-//       }
-//     } catch (error) {
-//       console.error('Error loading time settings:', error)
-//     }
-//   }
-
-//   const refreshAttendance = async () => {
-//     setLoading(true)
-//     setError(null)
-    
-//     try {
-//       const params = new URLSearchParams({
-//         type: 'real-time'
-//       })
-      
-//       if (dateRange.from) {
-//         params.append('date_from', dateRange.from)
-//       }
-//       if (dateRange.to) {
-//         params.append('date_to', dateRange.to)
-//       }
-      
-//       if (!isCompanyAdmin && (user?.school_id || user?.SchoolID)) {
-//         params.append('school_id', user.school_id || user.SchoolID)
-//       }
-
-//       const response = await fetch(`/api/analytics?${params}`)
-      
-//       if (!response.ok) {
-//         throw new Error(`HTTP error! status: ${response.status}`)
-//       }
-      
-//       const data = await response.json()
-      
-//       if (data.success) {
-//         if (data.current_activity && Array.isArray(data.current_activity)) {
-//           let formattedData = data.current_activity.map(record => ({
-//             id: record.attendance_id,
-//             studentName: record.student_name,
-//             student_name: record.student_name,
-//             status: record.status,
-//             time: record.scan_time,
-//             scan_time: record.scan_time,
-//             scanTime: record.scan_time,
-//             created_at: record.created_at,
-//             school_name: record.school_name,
-//             school_id: record.school_id,
-//             badge_number: record.badge_number,
-//             grade: record.grade || 'N/A' // NEW: Include grade
-//           }))
-          
-//           // Enhance with time settings if available
-//           if (timeSettings) {
-//             formattedData = enhanceAttendanceWithTimeSettings(formattedData, timeSettings)
-//           }
-          
-//           formattedData.sort((a, b) => {
-//             const timeA = new Date(a.scan_time || a.created_at)
-//             const timeB = new Date(b.scan_time || b.created_at)
-//             return timeB - timeA
-//           })
-          
-//           setAttendanceData(formattedData)
-//         } else {
-//           setAttendanceData([])
-//         }
-//       } else {
-//         setError(data.error || 'Failed to fetch attendance data')
-//         setAttendanceData([])
-//       }
-//     } catch (error) {
-//       console.error('Error refreshing attendance:', error)
-//       setError(error.message)
-//       setAttendanceData([])
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   useEffect(() => {
-//     if (dateRange.from && dateRange.to) {
-//       refreshAttendance()
-//     }
-//   }, [dateRange.from, dateRange.to, timeSettings])
-
-//   // NEW: Export to Excel function
-//   const exportToExcel = async () => {
-//     if (!filteredData.length) {
-//       alert('No data to export')
-//       return
-//     }
-
-//     setExporting(true)
-    
-//     try {
-//       const exportData = {
-//         data: filteredData,
-//         filters: {
-//           dateFrom: dateRange.from,
-//           dateTo: dateRange.to,
-//           statusFilter,
-//           gradeFilter,
-//           schoolId: user?.school_id || user?.SchoolID,
-//           schoolName: user?.school_name || 'School'
-//         },
-//         timeSettings
-//       }
-
-//       const response = await fetch('/api/export-attendance', {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//         },
-//         body: JSON.stringify(exportData)
-//       })
-
-//       if (!response.ok) {
-//         throw new Error('Export failed')
-//       }
-
-//       // Download the file
-//       const blob = await response.blob()
-//       const url = window.URL.createObjectURL(blob)
-//       const a = document.createElement('a')
-//       a.href = url
-//       a.download = `attendance-${dateRange.from}-to-${dateRange.to}.xlsx`
-//       document.body.appendChild(a)
-//       a.click()
-//       window.URL.revokeObjectURL(url)
-//       document.body.removeChild(a)
-
-//     } catch (error) {
-//       console.error('Export error:', error)
-//       alert('Failed to export data: ' + error.message)
-//     } finally {
-//       setExporting(false)
-//     }
-//   }
-
-//   // Filter data based on status and grade filters
-//   const filteredData = attendanceData.filter(record => {
-//     // Apply status filter
-//     let statusMatch = true
-//     if (statusFilter !== 'all') {
-//       switch (statusFilter) {
-//         case 'late':
-//           statusMatch = record.statusType === 'late'
-//           break
-//         case 'on-time':
-//           statusMatch = record.statusType === 'on-time' || record.statusType === 'early-arrival'
-//           break
-//         case 'early-departure':
-//           statusMatch = record.statusType === 'early-departure'
-//           break
-//         default:
-//           statusMatch = true
-//       }
-//     }
-
-//     // Apply grade filter
-//     let gradeMatch = true
-//     if (gradeFilter !== 'all') {
-//       gradeMatch = record.grade === gradeFilter
-//     }
-
-//     return statusMatch && gradeMatch
-//   })
-
-//   // Get status counts for filter buttons
-//   const getStatusCounts = () => {
-//     if (!attendanceData || attendanceData.length === 0) {
-//       return { all: 0, late: 0, 'on-time': 0, 'early-departure': 0 }
-//     }
-
-//     return {
-//       all: attendanceData.length,
-//       late: attendanceData.filter(r => r.statusType === 'late').length,
-//       'on-time': attendanceData.filter(r => 
-//         r.statusType === 'on-time' || r.statusType === 'early-arrival'
-//       ).length,
-//       'early-departure': attendanceData.filter(r => r.statusType === 'early-departure').length
-//     }
-//   }
-
-//   // NEW: Get unique grades for filter dropdown
-//   const getUniqueGrades = () => {
-//     const grades = [...new Set(attendanceData.map(r => r.grade).filter(g => g && g !== 'N/A'))]
-//     return grades.sort()
-//   }
-
-//   const statusCounts = getStatusCounts()
-//   const uniqueGrades = getUniqueGrades()
-
-//   return (
-//     <div>
-//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-//         <div>
-//           <h3 className="text-lg font-semibold text-gray-900">
-//             {isCompanyAdmin ? 'Network Attendance Records' : 'Recent Attendance'}
-//           </h3>
-//           {timeSettings && (
-//             <p className="text-sm text-gray-600 mt-1">
-//               Late after {timeSettings.late_arrival_time} • Early before {timeSettings.early_departure_time}
-//             </p>
-//           )}
-//         </div>
-//         <div className="flex flex-col sm:flex-row gap-2">
-//           <input
-//             type="date"
-//             value={dateRange.from}
-//             onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-//             max={dateRange.to}
-//           />
-//           <input
-//             type="date"
-//             value={dateRange.to}
-//             onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-//             min={dateRange.from}
-//             max={new Date().toISOString().split('T')[0]}
-//           />
-//           <button 
-//             onClick={refreshAttendance}
-//             disabled={loading}
-//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-//           >
-//             {loading ? 'Loading...' : 'Refresh'}
-//           </button>
-//           {/* NEW: Export button */}
-//           <button 
-//             onClick={exportToExcel}
-//             disabled={exporting || filteredData.length === 0}
-//             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-//           >
-//             {exporting ? 'Exporting...' : 'Export Excel'}
-//           </button>
-//         </div>
-//       </div>
-
-//       {/* Enhanced Filter Section */}
-//       <div className="mb-4 bg-white p-4 rounded-lg shadow border">
-//         <div className="flex flex-col space-y-4">
-//           {/* Status Filters */}
-//           {timeSettings && statusCounts.all > 0 && (
-//             <div>
-//               <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status:</label>
-//               <div className="flex flex-wrap gap-2">
-//                 <button
-//                   onClick={() => setStatusFilter('all')}
-//                   className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                     statusFilter === 'all' 
-//                       ? 'bg-blue-100 text-blue-800' 
-//                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//                   }`}
-//                 >
-//                   All ({statusCounts.all})
-//                 </button>
-//                 <button
-//                   onClick={() => setStatusFilter('on-time')}
-//                   className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                     statusFilter === 'on-time' 
-//                       ? 'bg-green-100 text-green-800' 
-//                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//                   }`}
-//                 >
-//                   🟢 On Time ({statusCounts['on-time']})
-//                 </button>
-//                 <button
-//                   onClick={() => setStatusFilter('late')}
-//                   className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                     statusFilter === 'late' 
-//                       ? 'bg-red-100 text-red-800' 
-//                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//                   }`}
-//                 >
-//                   🔴 Late ({statusCounts.late})
-//                 </button>
-//                 <button
-//                   onClick={() => setStatusFilter('early-departure')}
-//                   className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
-//                     statusFilter === 'early-departure' 
-//                       ? 'bg-orange-100 text-orange-800' 
-//                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-//                   }`}
-//                 >
-//                   🟠 Early Out ({statusCounts['early-departure']})
-//                 </button>
-//               </div>
-//             </div>
-//           )}
-
-//           {/* NEW: Grade Filter */}
-//           {uniqueGrades.length > 0 && (
-//             <div>
-//               <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Grade:</label>
-//               <select
-//                 value={gradeFilter}
-//                 onChange={(e) => setGradeFilter(e.target.value)}
-//                 className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-//               >
-//                 <option value="all">All Grades ({attendanceData.length})</option>
-//                 {uniqueGrades.map(grade => (
-//                   <option key={grade} value={grade}>
-//                     Grade {grade} ({attendanceData.filter(r => r.grade === grade).length})
-//                   </option>
-//                 ))}
-//               </select>
-//             </div>
-//           )}
-
-//           {/* Filter Summary */}
-//           <div className="text-sm text-gray-600">
-//             Showing {filteredData.length} of {attendanceData.length} records
-//             {statusFilter !== 'all' && ` • Status: ${statusFilter.replace('-', ' ')}`}
-//             {gradeFilter !== 'all' && ` • Grade: ${gradeFilter}`}
-//           </div>
-//         </div>
-//       </div>
-
-//       {error && (
-//         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-//           Error: {error}
-//         </div>
-//       )}
-
-//       <div className="overflow-x-auto -mx-4 sm:mx-0">
-//         <div className="inline-block min-w-full align-middle">
-//           <div className="bg-white rounded-lg shadow overflow-hidden">
-//             <table className="min-w-full divide-y divide-gray-200">
-//               <thead className="bg-gray-50">
-//                 <tr>
-//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                     Student
-//                   </th>
-//                   {/* NEW: Grade column */}
-//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                     Grade
-//                   </th>
-//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                     Status
-//                   </th>
-//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
-//                     Time
-//                   </th>
-//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
-//                     Date
-//                   </th>
-//                   {isCompanyAdmin && (
-//                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-//                       School
-//                     </th>
-//                   )}
-//                   {timeSettings && (
-//                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-//                       Notes
-//                     </th>
-//                   )}
-//                 </tr>
-//               </thead>
-//               <tbody className="bg-white divide-y divide-gray-200">
-//                 {filteredData.length > 0 ? (
-//                   filteredData.slice(0, 50).map((record, index) => (
-//                     <tr key={record.id || index} className="hover:bg-gray-50 transition-colors">
-//                       <td className="px-3 sm:px-6 py-4">
-//                         <div className="text-sm font-medium text-gray-900">
-//                           {record.studentName || record.student_name || 'Unknown Student'}
-//                         </div>
-//                         <div className="text-xs text-gray-500">
-//                           <div className="sm:hidden">
-//                             {formatTime(record.scan_time || record.time || record.created_at)}
-//                           </div>
-//                           {record.badge_number && (
-//                             <div>Badge: {record.badge_number}</div>
-//                           )}
-//                         </div>
-//                       </td>
-//                       {/* NEW: Grade cell */}
-//                       <td className="px-3 sm:px-6 py-4">
-//                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-//                           {record.grade || 'N/A'}
-//                         </span>
-//                       </td>
-//                       <td className="px-3 sm:px-6 py-4">
-//                         <div className="space-y-1">
-//                           {record.statusType && timeSettings ? (
-//                             <span className={getStatusBadgeClasses(record.statusType)}>
-//                               {getStatusIcon(record.statusType)} {record.statusLabel}
-//                             </span>
-//                           ) : (
-//                             <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-//                               record.status === 'IN' ? 'bg-green-100 text-green-800' : 
-//                               record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
-//                               'bg-gray-100 text-gray-800'
-//                             }`}>
-//                               {record.status === 'IN' ? 'Check In' : 
-//                                record.status === 'OUT' ? 'Check Out' : 
-//                                record.status || 'Unknown'}
-//                             </span>
-//                           )}
-//                           {record.message && (
-//                             <div className="text-xs text-gray-500 lg:hidden">
-//                               {record.message}
-//                             </div>
-//                           )}
-//                         </div>
-//                       </td>
-//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-//                         {formatTime(record.scan_time || record.time || record.created_at)}
-//                       </td>
-//                       <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-//                         {formatDate(record.scan_time || record.time || record.created_at)}
-//                       </td>
-//                       {isCompanyAdmin && (
-//                         <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
-//                           {record.school_name || 'Unknown School'}
-//                         </td>
-//                       )}
-//                       {timeSettings && (
-//                         <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden lg:table-cell">
-//                           {record.message || '—'}
-//                         </td>
-//                       )}
-//                     </tr>
-//                   ))
-//                 ) : (
-//                   <tr>
-//                     <td colSpan={isCompanyAdmin ? (timeSettings ? "7" : "6") : (timeSettings ? "6" : "5")} className="px-6 py-12 text-center">
-//                       <div className="text-gray-500">
-//                         {loading ? (
-//                           <div className="flex items-center justify-center">
-//                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
-//                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-//                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-//                             </svg>
-//                             Loading attendance records...
-//                           </div>
-//                         ) : (
-//                           <div>
-//                             <div className="text-gray-400 text-4xl mb-2">📊</div>
-//                             <p className="font-medium">
-//                               {statusFilter === 'all' && gradeFilter === 'all' ? 
-//                                 'No attendance records found' : 
-//                                 'No records match the selected filters'
-//                               }
-//                             </p>
-//                             <p className="text-sm mt-1">
-//                               {dateRange.from === dateRange.to ? 
-//                                 `No records for ${formatDate(dateRange.from)}` :
-//                                 `No records between ${formatDate(dateRange.from)} and ${formatDate(dateRange.to)}`
-//                               }
-//                             </p>
-//                           </div>
-//                         )}
-//                       </div>
-//                     </td>
-//                   </tr>
-//                 )}
-//               </tbody>
-//             </table>
-//           </div>
-//         </div>
-
-//         {/* Summary info */}
-//         {filteredData.length > 0 && (
-//           <div className="mt-4 text-sm text-gray-600 text-center">
-//             Showing {Math.min(50, filteredData.length)} of {filteredData.length} records
-//             {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
-//             {gradeFilter !== 'all' && ` (filtered by Grade ${gradeFilter})`}
-//             {filteredData.length > 50 && (
-//               <span className="block mt-1 text-xs">
-//                 Only showing first 50 records. Use filters to narrow results or export all data.
 //               </span>
 //             )}
 //           </div>
@@ -3263,14 +2891,99 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
-  const [gradeFilter, setGradeFilter] = useState('') // New grade filter
-  const [availableGrades, setAvailableGrades] = useState([]) // Available grades
+  const [gradeFilter, setGradeFilter] = useState('')
+  const [availableGrades, setAvailableGrades] = useState([])
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     setAttendanceData(attendance)
     loadTimeSettings()
     loadAvailableGrades()
   }, [attendance])
+
+  // Excel Export Function
+  const exportToExcel = async () => {
+    if (!filteredData.length) {
+      alert('No data to export')
+      return
+    }
+
+    setExporting(true)
+    
+    try {
+      // Prepare the data for export
+      const exportData = filteredData.map(record => ({
+        'Student Name': record.studentName || record.student_name || 'Unknown Student',
+        'Grade': record.grade || 'N/A',
+        'Status': record.status === 'IN' ? 'Check In' : record.status === 'OUT' ? 'Check Out' : record.status || 'Unknown',
+        'Enhanced Status': record.statusLabel || (record.status === 'IN' ? 'Check In' : 'Check Out'),
+        'Date': formatDate(record.scan_time || record.time || record.created_at),
+        'Time': formatTime(record.scan_time || record.time || record.created_at),
+        'School': record.school_name || (isCompanyAdmin ? 'Unknown School' : user?.school?.name || 'School'),
+        'Notes': record.message || '',
+        'Raw Timestamp': record.scan_time || record.time || record.created_at
+      }))
+
+      // Create filename with current filters
+      const now = new Date()
+      const timestamp = now.toISOString().split('T')[0]
+      let filename = `attendance-report-${timestamp}`
+      
+      // Add filter info to filename
+      if (statusFilter !== 'all') {
+        filename += `-${statusFilter}`
+      }
+      if (gradeFilter) {
+        filename += `-grade-${gradeFilter}`
+      }
+      if (dateRange.from === dateRange.to) {
+        filename += `-${dateRange.from}`
+      } else {
+        filename += `-${dateRange.from}-to-${dateRange.to}`
+      }
+
+      // Create Excel content using CSV format that Excel can read
+      const headers = Object.keys(exportData[0])
+      const csvContent = [
+        // Add title rows
+        [`Attendance Report - ${isCompanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
+        [`Generated: ${now.toLocaleString()}`],
+        [`Date Range: ${dateRange.from} to ${dateRange.to}`],
+        [`Filters: Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
+        [`Total Records: ${filteredData.length}`],
+        [], // Empty row
+        headers, // Column headers
+        ...exportData.map(row => headers.map(header => row[header] || ''))
+      ].map(row => 
+        row.map(cell => 
+          typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
+            ? `"${cell.replace(/"/g, '""')}"` 
+            : cell
+        ).join(',')
+      ).join('\n')
+
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `${filename}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      // Show success message
+      alert(`Exported ${filteredData.length} attendance records to ${filename}.csv`)
+
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export attendance data. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const loadTimeSettings = async () => {
     try {
@@ -3343,7 +3056,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
             id: record.attendance_id,
             studentName: record.student_name,
             student_name: record.student_name,
-            grade: record.grade, // Include grade information
+            grade: record.grade,
             status: record.status,
             time: record.scan_time,
             scan_time: record.scan_time,
@@ -3383,7 +3096,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
     if (dateRange.from && dateRange.to) {
       refreshAttendance()
     }
-  }, [dateRange.from, dateRange.to, gradeFilter]) // Refresh when grade filter changes
+  }, [dateRange.from, dateRange.to, gradeFilter])
 
   // Filter data based on status and grade filters
   const filteredData = attendanceData.filter(record => {
@@ -3415,6 +3128,35 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
         r.statusType === 'on-time' || r.statusType === 'early-arrival'
       ).length,
       'early-departure': filteredData.filter(r => r.statusType === 'early-departure').length
+    }
+  }
+
+  // Utility functions for status badges (add these if missing from your utils)
+  const getStatusBadgeClasses = (statusType) => {
+    switch (statusType) {
+      case 'late':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800'
+      case 'on-time':
+      case 'early-arrival':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800'
+      case 'early-departure':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800'
+      default:
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusIcon = (statusType) => {
+    switch (statusType) {
+      case 'late':
+        return '🔴'
+      case 'on-time':
+      case 'early-arrival':
+        return '🟢'
+      case 'early-departure':
+        return '🟠'
+      default:
+        return '⚪'
     }
   }
 
@@ -3482,6 +3224,13 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
           >
             {loading ? 'Loading...' : 'Refresh'}
+          </button>
+          <button 
+            onClick={exportToExcel}
+            disabled={exporting || filteredData.length === 0}
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+          >
+            {exporting ? 'Exporting...' : 'Export Excel'}
           </button>
         </div>
       </div>
@@ -3559,6 +3308,19 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
             </div>
           </div>
         )}
+
+        {/* Export Summary */}
+        {filteredData.length > 0 && (
+          <div className="text-sm text-gray-600 border-t pt-3">
+            Ready to export: {filteredData.length} records
+            {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
+            {gradeFilter && ` (Grade ${gradeFilter})`}
+            {dateRange.from === dateRange.to 
+              ? ` for ${formatDate(dateRange.from)}`
+              : ` from ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+            }
+          </div>
+        )}
       </div>
 
       {error && (
@@ -3567,7 +3329,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
         </div>
       )}
 
-      {/* Rest of your existing table code remains the same */}
+      {/* Attendance Table */}
       <div className="overflow-x-auto -mx-4 sm:mx-0">
         <div className="inline-block min-w-full align-middle">
           <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -3617,7 +3379,6 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                       </td>
                       <td className="px-3 sm:px-6 py-4">
                         <div className="space-y-1">
-                          {/* Enhanced status with time-based indicator */}
                           {record.statusType && timeSettings ? (
                             <span className={getStatusBadgeClasses(record.statusType)}>
                               {getStatusIcon(record.statusType)} {record.statusLabel}
@@ -3633,7 +3394,6 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                                record.status || 'Unknown'}
                             </span>
                           )}
-                          {/* Show message on mobile if available */}
                           {record.message && (
                             <div className="text-xs text-gray-500 lg:hidden">
                               {record.message}
@@ -3701,7 +3461,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
             )}
             {filteredData.length > 50 && (
               <span className="block mt-1 text-xs">
-                Only showing first 50 records. Use date filters to narrow results.
+                Only showing first 50 records. Use filters to narrow results or export all data.
               </span>
             )}
           </div>
@@ -3711,7 +3471,8 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   )
 }
 
-export { StudentsTab, AttendanceTabMobileResponsive }
+
+export { StudentsTab }
 
 function SchoolsNetworkTab({ companyId, user }) {
   const [schools, setSchools] = useState([])
@@ -3722,6 +3483,7 @@ function SchoolsNetworkTab({ companyId, user }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [schoolToDelete, setSchoolToDelete] = useState(null)
+
   const [newSchool, setNewSchool] = useState({
     name: '',
     location: '',
@@ -3730,6 +3492,17 @@ function SchoolsNetworkTab({ companyId, user }) {
     adminPassword: '',
     adminEmail: ''
   })
+  const [showPasswords, setShowPasswords] = useState({
+  adminPassword: false
+})
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }))
+  }
+
   const [createdSchoolCredentials, setCreatedSchoolCredentials] = useState(null)
   const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [error, setError] = useState('')
@@ -3954,6 +3727,7 @@ function SchoolsNetworkTab({ companyId, user }) {
     setShowCredentialsModal(false)
     setEditingSchool(null)
     setSchoolToDelete(null)
+    setShowPasswords({ adminPassword: false })
     setError('')
   }
 
@@ -4161,13 +3935,31 @@ function SchoolsNetworkTab({ companyId, user }) {
                     onChange={(e) => setNewSchool({...newSchool, adminUsername: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <input
-                    type="password"
-                    placeholder="Admin Password (auto-generates if empty)"
-                    value={newSchool.adminPassword}
-                    onChange={(e) => setNewSchool({...newSchool, adminPassword: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPasswords.adminPassword ? "text" : "password"}
+                      placeholder="Admin Password (auto-generates if empty)"
+                      value={newSchool.adminPassword}
+                      onChange={(e) => setNewSchool({...newSchool, adminPassword: e.target.value})}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility('adminPassword')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPasswords.adminPassword ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                   <input
                     type="email"
                     placeholder="Admin Email (optional)"

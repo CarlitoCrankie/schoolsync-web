@@ -1,4 +1,4 @@
-// import { useState } from 'react'
+// import { useState, useEffect } from 'react'
 
 // export default function LoginScreen({ onLogin }) {
 //   const [currentView, setCurrentView] = useState('login') // 'login', 'set-password'
@@ -8,13 +8,72 @@
 //   })
 //   const [passwordSetup, setPasswordSetup] = useState({
 //     student_name: '',
-//     school_id: '1',
+//     school_name: '', // Changed to school_name instead of school_id
 //     new_password: '',
 //     confirm_password: ''
 //   })
+//   const [schools, setSchools] = useState([])
+//   const [loadingSchools, setLoadingSchools] = useState(false)
 //   const [loading, setLoading] = useState(false)
 //   const [error, setError] = useState('')
 //   const [message, setMessage] = useState('')
+  
+//   // Password visibility states
+//   const [showPasswords, setShowPasswords] = useState({
+//     loginPassword: false,
+//     newPassword: false,
+//     confirmPassword: false
+//   })
+
+//   // Load schools when switching to set-password view
+//   useEffect(() => {
+//     if (currentView === 'set-password' && schools.length === 0) {
+//       loadSchools()
+//     }
+//   }, [currentView])
+
+//   const loadSchools = async () => {
+//     setLoadingSchools(true)
+//     setError('')
+    
+//     try {
+//       const response = await fetch('/api/schools')
+      
+//       if (!response.ok) {
+//         throw new Error(`HTTP error! status: ${response.status}`)
+//       }
+
+//       const result = await response.json()
+      
+//       if (result.success && result.data) {
+//         // Filter active schools and map to simpler format
+//         const activeSchools = result.data
+//           .filter(school => school.status === 'active')
+//           .map(school => ({
+//             id: school.school_id,
+//             name: school.name,
+//             location: school.location
+//           }))
+        
+//         setSchools(activeSchools)
+        
+//         // Set first school as default
+//         if (activeSchools.length > 0) {
+//           setPasswordSetup(prev => ({
+//             ...prev,
+//             school_name: activeSchools[0].name
+//           }))
+//         }
+//       } else {
+//         throw new Error('Invalid response format')
+//       }
+//     } catch (error) {
+//       console.error('Failed to load schools:', error)
+//       setError('Failed to load schools. Please try again.')
+//     } finally {
+//       setLoadingSchools(false)
+//     }
+//   }
 
 //   const handleInputChange = (e) => {
 //     setFormData({
@@ -30,6 +89,14 @@
 //       [e.target.name]: e.target.value
 //     })
 //     setError('')
+//   }
+
+//   // Toggle password visibility
+//   const togglePasswordVisibility = (field) => {
+//     setShowPasswords(prev => ({
+//       ...prev,
+//       [field]: !prev[field]
+//     }))
 //   }
 
 //   const handleLogin = async (e) => {
@@ -75,8 +142,15 @@
 //   }
 
 //   const checkPasswordStatus = async () => {
-//     if (!passwordSetup.student_name || !passwordSetup.school_id) {
+//     if (!passwordSetup.student_name || !passwordSetup.school_name) {
 //       setError('Please enter student name and select school')
+//       return
+//     }
+
+//     // Find the selected school to get its ID
+//     const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
+//     if (!selectedSchool) {
+//       setError('Please select a valid school')
 //       return
 //     }
 
@@ -92,7 +166,7 @@
 //         body: JSON.stringify({
 //           action: 'check_password_status',
 //           student_name: passwordSetup.student_name,
-//           school_id: parseInt(passwordSetup.school_id)
+//           school_id: selectedSchool.id
 //         }),
 //       })
 
@@ -117,7 +191,7 @@
 //   const handleSetPassword = async (e) => {
 //     e.preventDefault()
 
-//     if (!passwordSetup.student_name || !passwordSetup.school_id || 
+//     if (!passwordSetup.student_name || !passwordSetup.school_name || 
 //         !passwordSetup.new_password || !passwordSetup.confirm_password) {
 //       setError('Please fill in all fields')
 //       return
@@ -133,6 +207,13 @@
 //       return
 //     }
 
+//     // Find the selected school to get its ID
+//     const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
+//     if (!selectedSchool) {
+//       setError('Please select a valid school')
+//       return
+//     }
+
 //     setLoading(true)
 //     setError('')
 
@@ -145,7 +226,7 @@
 //         body: JSON.stringify({
 //           action: 'set_password',
 //           student_name: passwordSetup.student_name,
-//           school_id: parseInt(passwordSetup.school_id),
+//           school_id: selectedSchool.id,
 //           new_password: passwordSetup.new_password
 //         }),
 //       })
@@ -161,9 +242,15 @@
 //       setFormData({ ...formData, username: passwordSetup.student_name })
 //       setPasswordSetup({
 //         student_name: '',
-//         school_id: '1',
+//         school_name: schools.length > 0 ? schools[0].name : '',
 //         new_password: '',
 //         confirm_password: ''
+//       })
+//       // Reset password visibility
+//       setShowPasswords({
+//         loginPassword: false,
+//         newPassword: false,
+//         confirmPassword: false
 //       })
 //     } catch (error) {
 //       setError(error.message || 'Failed to set password')
@@ -232,7 +319,7 @@
 //                 name="username"
 //                 value={formData.username}
 //                 onChange={handleInputChange}
-//                 className="input-field"
+//                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
 //                 placeholder="Enter username or child's name"
 //                 disabled={loading}
 //               />
@@ -240,21 +327,40 @@
 
 //             <div>
 //               <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-//               <input 
-//                 type="password" 
-//                 name="password"
-//                 value={formData.password}
-//                 onChange={handleInputChange}
-//                 className="input-field"
-//                 placeholder="Enter password"
-//                 disabled={loading}
-//               />
+//               <div className="relative">
+//                 <input 
+//                   type={showPasswords.loginPassword ? "text" : "password"}
+//                   name="password"
+//                   value={formData.password}
+//                   onChange={handleInputChange}
+//                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+//                   placeholder="Enter password"
+//                   disabled={loading}
+//                 />
+//                 <button
+//                   type="button"
+//                   onClick={() => togglePasswordVisibility('loginPassword')}
+//                   className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+//                   disabled={loading}
+//                 >
+//                   {showPasswords.loginPassword ? (
+//                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+//                     </svg>
+//                   ) : (
+//                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+//                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+//                     </svg>
+//                   )}
+//                 </button>
+//               </div>
 //             </div>
 
 //             <button 
 //               type="submit"
 //               disabled={loading}
-//               className="w-full btn-primary disabled:bg-indigo-400"
+//               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
 //             >
 //               {loading ? 'Logging in...' : 'Login'}
 //             </button>
@@ -270,7 +376,7 @@
 //                 name="student_name"
 //                 value={passwordSetup.student_name}
 //                 onChange={handlePasswordSetupChange}
-//                 className="input-field"
+//                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
 //                 placeholder="Enter your child's full name exactly as registered"
 //                 disabled={loading}
 //               />
@@ -278,72 +384,131 @@
 
 //             <div>
 //               <label className="block text-sm font-medium text-gray-700 mb-2">School</label>
-//               <select 
-//                 name="school_id"
-//                 value={passwordSetup.school_id}
-//                 onChange={handlePasswordSetupChange}
-//                 className="input-field"
-//                 disabled={loading}
-//               >
-//                 <option value="1">School 1</option>
-//                 <option value="2">School 2</option>
-//                 <option value="3">School 3</option>
-//               </select>
+//               {loadingSchools ? (
+//                 <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500 flex items-center">
+//                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
+//                   Loading schools...
+//                 </div>
+//               ) : schools.length > 0 ? (
+//                 <select 
+//                   name="school_name"
+//                   value={passwordSetup.school_name}
+//                   onChange={handlePasswordSetupChange}
+//                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+//                   disabled={loading}
+//                 >
+//                   <option value="">Select your child's school</option>
+//                   {schools.map((school) => (
+//                     <option key={school.id} value={school.name}>
+//                       {school.name}{school.location ? ` - ${school.location}` : ''}
+//                     </option>
+//                   ))}
+//                 </select>
+//               ) : (
+//                 <div className="w-full px-3 py-2 border border-red-300 rounded-md bg-red-50 text-red-600">
+//                   No active schools found. 
+//                   <button 
+//                     type="button" 
+//                     onClick={loadSchools}
+//                     className="ml-2 text-blue-600 underline hover:text-blue-800"
+//                   >
+//                     Try again
+//                   </button>
+//                 </div>
+//               )}
 //             </div>
 
-//             <div className="flex space-x-2">
+//             <div>
 //               <button 
 //                 type="button"
 //                 onClick={checkPasswordStatus}
-//                 disabled={loading || !passwordSetup.student_name || !passwordSetup.school_id}
-//                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+//                 disabled={loading || !passwordSetup.student_name || !passwordSetup.school_name || schools.length === 0}
+//                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
 //               >
-//                 Check Student
+//                 {loading ? 'Checking...' : 'Check Student'}
 //               </button>
 //             </div>
 
 //             {message && (
-//             <>
+//               <>
 //                 <div>
-//                 <label className="block text-sm font-medium text-gray-700 mb-2">
+//                   <label className="block text-sm font-medium text-gray-700 mb-2">
 //                     New Password
-//                 </label>
-//                 <input 
-//                     type="password" 
-//                     name="new_password"
-//                     value={passwordSetup.new_password}
-//                     onChange={handlePasswordSetupChange}
-//                     className="input-field"
-//                     placeholder="Enter new password (6+ characters)"
-//                     disabled={loading}
-//                     minLength="6"
-//                 />
+//                   </label>
+//                   <div className="relative">
+//                     <input 
+//                       type={showPasswords.newPassword ? "text" : "password"}
+//                       name="new_password"
+//                       value={passwordSetup.new_password}
+//                       onChange={handlePasswordSetupChange}
+//                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+//                       placeholder="Enter new password (6+ characters)"
+//                       disabled={loading}
+//                       minLength="6"
+//                     />
+//                     <button
+//                       type="button"
+//                       onClick={() => togglePasswordVisibility('newPassword')}
+//                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+//                       disabled={loading}
+//                     >
+//                       {showPasswords.newPassword ? (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+//                         </svg>
+//                       ) : (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+//                         </svg>
+//                       )}
+//                     </button>
+//                   </div>
 //                 </div>
 
 //                 <div>
-//                 <label className="block text-sm font-medium text-gray-700 mb-2">
+//                   <label className="block text-sm font-medium text-gray-700 mb-2">
 //                     Confirm Password
-//                 </label>
-//                 <input 
-//                     type="password" 
-//                     name="confirm_password"
-//                     value={passwordSetup.confirm_password}
-//                     onChange={handlePasswordSetupChange}
-//                     className="input-field"
-//                     placeholder="Confirm your password"
-//                     disabled={loading}
-//                     minLength="6"
-//                 />
+//                   </label>
+//                   <div className="relative">
+//                     <input 
+//                       type={showPasswords.confirmPassword ? "text" : "password"}
+//                       name="confirm_password"
+//                       value={passwordSetup.confirm_password}
+//                       onChange={handlePasswordSetupChange}
+//                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+//                       placeholder="Confirm your password"
+//                       disabled={loading}
+//                       minLength="6"
+//                     />
+//                     <button
+//                       type="button"
+//                       onClick={() => togglePasswordVisibility('confirmPassword')}
+//                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+//                       disabled={loading}
+//                     >
+//                       {showPasswords.confirmPassword ? (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+//                         </svg>
+//                       ) : (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+//                         </svg>
+//                       )}
+//                     </button>
+//                   </div>
 //                 </div>
 
 //                 <button 
-//                 type="submit"
-//                 disabled={loading}
-//                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+//                   type="submit"
+//                   disabled={loading}
+//                   className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
 //                 >
-//                 {loading ? 'Setting Password...' : 'Set Password'}
+//                   {loading ? 'Setting Password...' : 'Set Password'}
 //                 </button>
-//             </>
+//               </>
 //             )}
 //           </form>
 //         )}
@@ -358,17 +523,24 @@
 //     </div>
 //   )
 // }
+
 import { useState, useEffect } from 'react'
 
 export default function LoginScreen({ onLogin }) {
-  const [currentView, setCurrentView] = useState('login') // 'login', 'set-password'
+  const [currentView, setCurrentView] = useState('login') // 'login', 'set-password', 'reset-password'
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   })
   const [passwordSetup, setPasswordSetup] = useState({
     student_name: '',
-    school_name: '', // Changed to school_name instead of school_id
+    school_name: '',
+    new_password: '',
+    confirm_password: ''
+  })
+  const [passwordReset, setPasswordReset] = useState({
+    student_name: '',
+    school_name: '',
     new_password: '',
     confirm_password: ''
   })
@@ -377,10 +549,19 @@ export default function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  
+  // Password visibility states
+  const [showPasswords, setShowPasswords] = useState({
+    loginPassword: false,
+    newPassword: false,
+    confirmPassword: false,
+    resetNewPassword: false,
+    resetConfirmPassword: false
+  })
 
-  // Load schools when switching to set-password view
+  // Load schools when switching to set-password or reset-password view
   useEffect(() => {
-    if (currentView === 'set-password' && schools.length === 0) {
+    if ((currentView === 'set-password' || currentView === 'reset-password') && schools.length === 0) {
       loadSchools()
     }
   }, [currentView])
@@ -399,7 +580,6 @@ export default function LoginScreen({ onLogin }) {
       const result = await response.json()
       
       if (result.success && result.data) {
-        // Filter active schools and map to simpler format
         const activeSchools = result.data
           .filter(school => school.status === 'active')
           .map(school => ({
@@ -410,12 +590,9 @@ export default function LoginScreen({ onLogin }) {
         
         setSchools(activeSchools)
         
-        // Set first school as default
         if (activeSchools.length > 0) {
-          setPasswordSetup(prev => ({
-            ...prev,
-            school_name: activeSchools[0].name
-          }))
+          setPasswordSetup(prev => ({ ...prev, school_name: activeSchools[0].name }))
+          setPasswordReset(prev => ({ ...prev, school_name: activeSchools[0].name }))
         }
       } else {
         throw new Error('Invalid response format')
@@ -442,6 +619,31 @@ export default function LoginScreen({ onLogin }) {
       [e.target.name]: e.target.value
     })
     setError('')
+  }
+
+  const handlePasswordResetChange = (e) => {
+    setPasswordReset({
+      ...passwordReset,
+      [e.target.name]: e.target.value
+    })
+    setError('')
+  }
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }))
+  }
+
+  const clearMessages = () => {
+    setError('')
+    setMessage('')
+  }
+
+  const switchView = (view) => {
+    setCurrentView(view)
+    clearMessages()
   }
 
   const handleLogin = async (e) => {
@@ -486,14 +688,15 @@ export default function LoginScreen({ onLogin }) {
     }
   }
 
-  const checkPasswordStatus = async () => {
-    if (!passwordSetup.student_name || !passwordSetup.school_name) {
+  const checkPasswordStatus = async (isReset = false) => {
+    const data = isReset ? passwordReset : passwordSetup
+    
+    if (!data.student_name || !data.school_name) {
       setError('Please enter student name and select school')
       return
     }
 
-    // Find the selected school to get its ID
-    const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
+    const selectedSchool = schools.find(school => school.name === data.school_name)
     if (!selectedSchool) {
       setError('Please select a valid school')
       return
@@ -510,21 +713,29 @@ export default function LoginScreen({ onLogin }) {
         },
         body: JSON.stringify({
           action: 'check_password_status',
-          student_name: passwordSetup.student_name,
+          student_name: data.student_name,
           school_id: selectedSchool.id
         }),
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Student not found')
+        throw new Error(result.error || 'Student not found')
       }
       
-      if (data.password_set) {
-        setError('Password already set for this student. Please use the login form.')
+      if (isReset) {
+        if (!result.password_set) {
+          setError('No password is set for this student. Please use "First Time? Set Password" instead.')
+        } else {
+          setMessage(`Student found: ${result.student_name} (${result.grade}) at ${result.school_name}. You can now reset the password.`)
+        }
       } else {
-        setMessage(`Student found: ${data.student_name} (${data.grade}) at ${data.school_name}. You can now set a password.`)
+        if (result.password_set) {
+          setError('Password already set for this student. Please use the login form or reset password if forgotten.')
+        } else {
+          setMessage(`Student found: ${result.student_name} (${result.grade}) at ${result.school_name}. You can now set a password.`)
+        }
       }
     } catch (error) {
       setError(error.message || 'Student not found')
@@ -552,7 +763,6 @@ export default function LoginScreen({ onLogin }) {
       return
     }
 
-    // Find the selected school to get its ID
     const selectedSchool = schools.find(school => school.name === passwordSetup.school_name)
     if (!selectedSchool) {
       setError('Please select a valid school')
@@ -591,12 +801,122 @@ export default function LoginScreen({ onLogin }) {
         new_password: '',
         confirm_password: ''
       })
+      setShowPasswords({
+        loginPassword: false,
+        newPassword: false,
+        confirmPassword: false,
+        resetNewPassword: false,
+        resetConfirmPassword: false
+      })
     } catch (error) {
       setError(error.message || 'Failed to set password')
     } finally {
       setLoading(false)
     }
   }
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+
+    if (!passwordReset.student_name || !passwordReset.school_name || 
+        !passwordReset.new_password || !passwordReset.confirm_password) {
+      setError('Please fill in all fields')
+      return
+    }
+
+    if (passwordReset.new_password !== passwordReset.confirm_password) {
+      setError('Passwords do not match')
+      return
+    }
+
+    if (passwordReset.new_password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      return
+    }
+
+    const selectedSchool = schools.find(school => school.name === passwordReset.school_name)
+    if (!selectedSchool) {
+      setError('Please select a valid school')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'reset_password',
+          student_name: passwordReset.student_name,
+          school_id: selectedSchool.id,
+          new_password: passwordReset.new_password
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password')
+      }
+      
+      setMessage('Password reset successfully! You can now login with your child\'s name and the new password.')
+      setCurrentView('login')
+      setFormData({ ...formData, username: passwordReset.student_name })
+      setPasswordReset({
+        student_name: '',
+        school_name: schools.length > 0 ? schools[0].name : '',
+        new_password: '',
+        confirm_password: ''
+      })
+      setShowPasswords({
+        loginPassword: false,
+        newPassword: false,
+        confirmPassword: false,
+        resetNewPassword: false,
+        resetConfirmPassword: false
+      })
+    } catch (error) {
+      setError(error.message || 'Failed to reset password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const renderPasswordInput = (type, value, onChange, placeholder, showPasswordKey, minLength = 6) => (
+    <div className="relative">
+      <input 
+        type={showPasswords[showPasswordKey] ? "text" : "password"}
+        name={type}
+        value={value}
+        onChange={onChange}
+        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        placeholder={placeholder}
+        disabled={loading}
+        minLength={minLength}
+      />
+      <button
+        type="button"
+        onClick={() => togglePasswordVisibility(showPasswordKey)}
+        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+        disabled={loading}
+      >
+        {showPasswords[showPasswordKey] ? (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  )
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -624,7 +944,7 @@ export default function LoginScreen({ onLogin }) {
         <div className="mb-4">
           <div className="flex border-b border-gray-200">
             <button
-              onClick={() => setCurrentView('login')}
+              onClick={() => switchView('login')}
               className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 ${
                 currentView === 'login'
                   ? 'border-indigo-500 text-indigo-600'
@@ -634,14 +954,24 @@ export default function LoginScreen({ onLogin }) {
               Login
             </button>
             <button
-              onClick={() => setCurrentView('set-password')}
+              onClick={() => switchView('set-password')}
               className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 ${
                 currentView === 'set-password'
                   ? 'border-indigo-500 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              First Time? Set Password
+              First Time?
+            </button>
+            <button
+              onClick={() => switchView('reset-password')}
+              className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 ${
+                currentView === 'reset-password'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Reset Password
             </button>
           </div>
         </div>
@@ -658,35 +988,42 @@ export default function LoginScreen({ onLogin }) {
                 name="username"
                 value={formData.username}
                 onChange={handleInputChange}
-                className="input-field"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Enter username or child's name"
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input 
-                type="password" 
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className="input-field"
-                placeholder="Enter password"
-                disabled={loading}
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+                <button
+                  type="button"
+                  onClick={() => switchView('reset-password')}
+                  className="text-indigo-600 hover:text-indigo-800 text-xs ml-2 underline"
+                >
+                  Forgot password?
+                </button>
+              </label>
+              {renderPasswordInput('password', formData.password, handleInputChange, 'Enter password', 'loginPassword', 1)}
             </div>
 
             <button 
               type="submit"
               disabled={loading}
-              className="w-full btn-primary disabled:bg-indigo-400"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
             >
               {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
-        ) : (
+        ) : currentView === 'set-password' ? (
           <form onSubmit={handleSetPassword} className="space-y-4">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">
+                <strong>First time parent?</strong> Set up your password to access your child's attendance records.
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Child's Full Name
@@ -696,7 +1033,7 @@ export default function LoginScreen({ onLogin }) {
                 name="student_name"
                 value={passwordSetup.student_name}
                 onChange={handlePasswordSetupChange}
-                className="input-field"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Enter your child's full name exactly as registered"
                 disabled={loading}
               />
@@ -705,7 +1042,7 @@ export default function LoginScreen({ onLogin }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">School</label>
               {loadingSchools ? (
-                <div className="input-field bg-gray-100 text-gray-500 flex items-center">
+                <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500 flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
                   Loading schools...
                 </div>
@@ -714,7 +1051,7 @@ export default function LoginScreen({ onLogin }) {
                   name="school_name"
                   value={passwordSetup.school_name}
                   onChange={handlePasswordSetupChange}
-                  className="input-field"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   disabled={loading}
                 >
                   <option value="">Select your child's school</option>
@@ -725,7 +1062,7 @@ export default function LoginScreen({ onLogin }) {
                   ))}
                 </select>
               ) : (
-                <div className="input-field bg-red-50 text-red-600 border-red-200">
+                <div className="w-full px-3 py-2 border border-red-300 rounded-md bg-red-50 text-red-600">
                   No active schools found. 
                   <button 
                     type="button" 
@@ -741,7 +1078,7 @@ export default function LoginScreen({ onLogin }) {
             <div>
               <button 
                 type="button"
-                onClick={checkPasswordStatus}
+                onClick={() => checkPasswordStatus(false)}
                 disabled={loading || !passwordSetup.student_name || !passwordSetup.school_name || schools.length === 0}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
               >
@@ -755,32 +1092,14 @@ export default function LoginScreen({ onLogin }) {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     New Password
                   </label>
-                  <input 
-                    type="password" 
-                    name="new_password"
-                    value={passwordSetup.new_password}
-                    onChange={handlePasswordSetupChange}
-                    className="input-field"
-                    placeholder="Enter new password (6+ characters)"
-                    disabled={loading}
-                    minLength="6"
-                  />
+                  {renderPasswordInput('new_password', passwordSetup.new_password, handlePasswordSetupChange, 'Enter new password (6+ characters)', 'newPassword')}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password
                   </label>
-                  <input 
-                    type="password" 
-                    name="confirm_password"
-                    value={passwordSetup.confirm_password}
-                    onChange={handlePasswordSetupChange}
-                    className="input-field"
-                    placeholder="Confirm your password"
-                    disabled={loading}
-                    minLength="6"
-                  />
+                  {renderPasswordInput('confirm_password', passwordSetup.confirm_password, handlePasswordSetupChange, 'Confirm your password', 'confirmPassword')}
                 </div>
 
                 <button 
@@ -793,11 +1112,107 @@ export default function LoginScreen({ onLogin }) {
               </>
             )}
           </form>
+        ) : (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded">
+              <p className="text-sm text-orange-800">
+                <strong>Reset Password:</strong> Enter your child's information to reset your parent account password.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Child's Full Name
+              </label>
+              <input 
+                type="text" 
+                name="student_name"
+                value={passwordReset.student_name}
+                onChange={handlePasswordResetChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Enter your child's full name exactly as registered"
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">School</label>
+              {loadingSchools ? (
+                <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500 flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
+                  Loading schools...
+                </div>
+              ) : schools.length > 0 ? (
+                <select 
+                  name="school_name"
+                  value={passwordReset.school_name}
+                  onChange={handlePasswordResetChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  disabled={loading}
+                >
+                  <option value="">Select your child's school</option>
+                  {schools.map((school) => (
+                    <option key={school.id} value={school.name}>
+                      {school.name}{school.location ? ` - ${school.location}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full px-3 py-2 border border-red-300 rounded-md bg-red-50 text-red-600">
+                  No active schools found. 
+                  <button 
+                    type="button" 
+                    onClick={loadSchools}
+                    className="ml-2 text-blue-600 underline hover:text-blue-800"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <button 
+                type="button"
+                onClick={() => checkPasswordStatus(true)}
+                disabled={loading || !passwordReset.student_name || !passwordReset.school_name || schools.length === 0}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+              >
+                {loading ? 'Checking...' : 'Verify Student'}
+              </button>
+            </div>
+
+            {message && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Password
+                  </label>
+                  {renderPasswordInput('new_password', passwordReset.new_password, handlePasswordResetChange, 'Enter new password (6+ characters)', 'resetNewPassword')}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm New Password
+                  </label>
+                  {renderPasswordInput('confirm_password', passwordReset.confirm_password, handlePasswordResetChange, 'Confirm your new password', 'resetConfirmPassword')}
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white py-2 px-4 rounded-md font-medium transition-colors"
+                >
+                  {loading ? 'Resetting Password...' : 'Reset Password'}
+                </button>
+              </>
+            )}
+          </form>
         )}
 
         <div className="mt-6 text-xs text-gray-500 space-y-1">
           <p><strong>Instructions:</strong></p>
-          <p><strong>Parents:</strong> First time? Use "Set Password" tab with your child's exact name.</p>
+          <p><strong>Parents:</strong> First time? Use "First Time?" tab. Forgot password? Use "Reset Password" tab.</p>
           <p><strong>Staff:</strong> Use your admin username and password.</p>
           <p><strong>Demo Admin:</strong> mainadmin / admin123</p>
         </div>
