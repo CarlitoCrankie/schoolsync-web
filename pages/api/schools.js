@@ -1103,38 +1103,37 @@ async function handleCreateSchool(req, res) {
       VALUES (@username, @passwordHash, @role, @schoolId, @email, 1, GETDATE())
     `)
 
-    // Create default time settings for the new school
-    const timeSettingsRequest = transaction.request()
-    timeSettingsRequest.input('newSchoolId', sql.Int, schoolId)
-    timeSettingsRequest.input('schoolStartTime', sql.Time, '08:00:00')
-    timeSettingsRequest.input('schoolEndTime', sql.Time, '15:00:00')
-    timeSettingsRequest.input('lateArrivalTime', sql.Time, '08:30:00')
-    timeSettingsRequest.input('earlyDepartureTime', sql.Time, '14:00:00')
-    timeSettingsRequest.input('timezone', sql.NVarChar(50), 'Africa/Accra')
+   // In handleCreateSchool function, replace the time settings section with:
+const timeSettingsRequest = transaction.request()
+timeSettingsRequest.input('newSchoolId', sql.Int, schoolId)
+timeSettingsRequest.input('schoolStartTime', sql.NVarChar(8), '08:00:00')  // Use NVarChar instead
+timeSettingsRequest.input('schoolEndTime', sql.NVarChar(8), '15:00:00')
+timeSettingsRequest.input('lateArrivalTime', sql.NVarChar(8), '08:30:00')
+timeSettingsRequest.input('earlyDepartureTime', sql.NVarChar(8), '14:00:00')
+timeSettingsRequest.input('timezone', sql.NVarChar(50), 'Africa/Accra')
 
-    await timeSettingsRequest.query(`
-      INSERT INTO SchoolTimeSettings (
-        SchoolID, 
-        SchoolStartTime, 
-        SchoolEndTime, 
-        LateArrivalTime, 
-        EarlyDepartureTime, 
-        Timezone,
-        CreatedAt,
-        UpdatedAt
-      )
-      VALUES (
-        @newSchoolId, 
-        @schoolStartTime, 
-        @schoolEndTime, 
-        @lateArrivalTime, 
-        @earlyDepartureTime, 
-        @timezone,
-        GETDATE(),
-        GETDATE()
-      )
-    `)
-
+await timeSettingsRequest.query(`
+  INSERT INTO SchoolTimeSettings (
+    SchoolID, 
+    SchoolStartTime, 
+    SchoolEndTime, 
+    LateArrivalTime, 
+    EarlyDepartureTime, 
+    Timezone,
+    CreatedAt,
+    UpdatedAt
+  )
+  VALUES (
+    @newSchoolId, 
+    CAST(@schoolStartTime AS TIME), 
+    CAST(@schoolEndTime AS TIME), 
+    CAST(@lateArrivalTime AS TIME), 
+    CAST(@earlyDepartureTime AS TIME), 
+    @timezone,
+    GETDATE(),
+    GETDATE()
+  )
+`)
     await transaction.commit()
 
     res.json({
