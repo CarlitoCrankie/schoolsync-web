@@ -1256,6 +1256,105 @@ async function handleUpdateSchool(req, res) {
 }
 
 // DELETE - Delete/disable school (soft delete recommended)
+// async function handleDeleteSchool(req, res) {
+//   const pool = await getPool()
+//   const request = pool.request()
+  
+//   const { school_id } = req.query
+//   const { force_delete = false } = req.body
+
+//   if (!school_id) {
+//     return res.status(400).json({
+//       success: false,
+//       error: 'School ID is required'
+//     })
+//   }
+
+//   try {
+//     request.input('schoolId', sql.Int, parseInt(school_id))
+
+//     // Check if school exists and has students/attendance records
+//     const schoolCheck = await request.query(`
+//       SELECT 
+//         s.SchoolID,
+//         s.Name,
+//         COUNT(DISTINCT st.StudentID) as StudentCount,
+//         COUNT(a.AttendanceID) as AttendanceCount
+//       FROM Schools s
+//       LEFT JOIN Students st ON s.SchoolID = st.SchoolID
+//       LEFT JOIN dbo.Attendance a ON st.StudentID = a.StudentID
+//       WHERE s.SchoolID = @schoolId
+//       GROUP BY s.SchoolID, s.Name
+//     `)
+
+//     if (schoolCheck.recordset.length === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         error: 'School not found'
+//       })
+//     }
+
+//     const school = schoolCheck.recordset[0]
+//     const hasData = school.StudentCount > 0 || school.AttendanceCount > 0
+
+//     if (hasData && !force_delete) {
+//       // Soft delete - just disable the school and its admin users
+//       await request.query(`
+//         UPDATE Schools 
+//         SET Status = 'inactive', UpdatedAt = GETDATE()
+//         WHERE SchoolID = @schoolId
+//       `)
+
+//       await request.query(`
+//         UPDATE Users 
+//         SET IsActive = 0
+//         WHERE SchoolID = @schoolId AND Role = 'school_admin'
+//       `)
+
+//       return res.json({
+//         success: true,
+//         action: 'soft_delete',
+//         message: `School "${school.Name}" has been disabled`,
+//         note: `This school has ${school.StudentCount} students and ${school.AttendanceCount} attendance records. It has been disabled instead of deleted.`,
+//         data: { school_id: school.SchoolID, name: school.Name }
+//       })
+//     }
+
+//     if (force_delete) {
+//       // Hard delete - remove all related data including time settings
+//       await request.query(`DELETE FROM dbo.Attendance WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
+//       await request.query(`DELETE FROM Parents WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
+//       await request.query(`DELETE FROM SyncAgentStatus WHERE SchoolID = @schoolId`)
+//       await request.query(`DELETE FROM SchoolTimeSettings WHERE SchoolID = @schoolId`)
+//       await request.query(`DELETE FROM Users WHERE SchoolID = @schoolId`)
+//       await request.query(`DELETE FROM Students WHERE SchoolID = @schoolId`)
+//       await request.query(`DELETE FROM Schools WHERE SchoolID = @schoolId`)
+
+//       return res.json({
+//         success: true,
+//         action: 'hard_delete',
+//         message: `School "${school.Name}" and all related data has been permanently deleted`,
+//         data: { school_id: school.SchoolID, name: school.Name }
+//       })
+//     }
+
+//     // No data, safe to delete school, admin users, and time settings
+//     await request.query(`DELETE FROM SchoolTimeSettings WHERE SchoolID = @schoolId`)
+//     await request.query(`DELETE FROM Users WHERE SchoolID = @schoolId`)
+//     await request.query(`DELETE FROM Schools WHERE SchoolID = @schoolId`)
+
+//     res.json({
+//       success: true,
+//       action: 'delete',
+//       message: `School "${school.Name}" has been deleted`,
+//       data: { school_id: school.SchoolID, name: school.Name }
+//     })
+
+//   } catch (error) {
+//     console.error('Error deleting school:', error)
+//     throw error
+//   }
+// }
 async function handleDeleteSchool(req, res) {
   const pool = await getPool()
   const request = pool.request()
@@ -1298,30 +1397,26 @@ async function handleDeleteSchool(req, res) {
     const hasData = school.StudentCount > 0 || school.AttendanceCount > 0
 
     if (hasData && !force_delete) {
-      // Soft delete - just disable the school and its admin users
-      await request.query(`
-        UPDATE Schools 
-        SET Status = 'inactive', UpdatedAt = GETDATE()
-        WHERE SchoolID = @schoolId
-      `)
-
-      await request.query(`
-        UPDATE Users 
-        SET IsActive = 0
-        WHERE SchoolID = @schoolId AND Role = 'school_admin'
-      `)
+      // Enhanced soft delete - disable school AND remove all student data
+      await request.query(`DELETE FROM dbo.Attendance WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
+      await request.query(`DELETE FROM Parents WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
+      await request.query(`DELETE FROM Students WHERE SchoolID = @schoolId`)
+      await request.query(`DELETE FROM SyncAgentStatus WHERE SchoolID = @schoolId`)
+      await request.query(`DELETE FROM SchoolTimeSettings WHERE SchoolID = @schoolId`)
+      await request.query(`UPDATE Schools SET Status = 'inactive', UpdatedAt = GETDATE() WHERE SchoolID = @schoolId`)
+      await request.query(`UPDATE Users SET IsActive = 0 WHERE SchoolID = @schoolId AND Role = 'school_admin'`)
 
       return res.json({
         success: true,
-        action: 'soft_delete',
-        message: `School "${school.Name}" has been disabled`,
-        note: `This school has ${school.StudentCount} students and ${school.AttendanceCount} attendance records. It has been disabled instead of deleted.`,
+        action: 'soft_delete_with_cleanup',
+        message: `School "${school.Name}" has been disabled and all student data removed`,
+        note: `This school had ${school.StudentCount} students and ${school.AttendanceCount} attendance records. All data has been removed but school record preserved for historical purposes.`,
         data: { school_id: school.SchoolID, name: school.Name }
       })
     }
 
     if (force_delete) {
-      // Hard delete - remove all related data including time settings
+      // Hard delete - remove all related data including the school record itself
       await request.query(`DELETE FROM dbo.Attendance WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
       await request.query(`DELETE FROM Parents WHERE StudentID IN (SELECT StudentID FROM Students WHERE SchoolID = @schoolId)`)
       await request.query(`DELETE FROM SyncAgentStatus WHERE SchoolID = @schoolId`)
