@@ -1,22 +1,3 @@
-// pages/api/upload.js
-import { getPool, sql } from '../../lib/database'
-import formidable from 'formidable'
-import csv from 'csv-parser'
-import fs from 'fs'
-import crypto from 'crypto'
-import path from 'path'
-
-export const config = {
-  api: {
-    bodyParser: false,
-    responseLimit: false,
-  },
-}
-
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex')
-}
-
 import { getPool, sql } from '../../lib/database'
 import formidable from 'formidable'
 import csv from 'csv-parser'
@@ -30,6 +11,10 @@ export const config = {
     bodyParser: false,
     responseLimit: false,
   },
+}
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex')
 }
 
 export default async function handler(req, res) {
