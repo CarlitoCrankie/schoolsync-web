@@ -17,16 +17,31 @@ function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex')
 }
 
+import { getPool, sql } from '../../lib/database'
+import formidable from 'formidable'
+import csv from 'csv-parser'
+import fs from 'fs'
+import crypto from 'crypto'
+import path from 'path'
+import os from 'os'
+
+export const config = {
+  api: {
+    bodyParser: false,
+    responseLimit: false,
+  },
+}
+
 export default async function handler(req, res) {
-  console.log('Upload request received:', req.method)
-  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    // Create upload directory if it doesn't exist
-    const uploadDir = path.join(process.cwd(), 'tmp')
+    // Use system temp directory instead of hardcoded path
+    const uploadDir = os.tmpdir()
+    
+    // Ensure temp directory exists
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true })
     }
@@ -38,10 +53,7 @@ export default async function handler(req, res) {
     })
 
     const [fields, files] = await form.parse(req)
-    console.log('Form parsed successfully')
-    console.log('Fields:', fields)
-    console.log('Files:', Object.keys(files))
-
+    
     const file = files.file?.[0]
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' })
@@ -52,13 +64,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'School ID is required' })
     }
 
-    console.log('Processing CSV file:', file.filepath)
     const results = await processStudentCSV(file.filepath, parseInt(school_id))
     
     // Clean up uploaded file
     fs.unlinkSync(file.filepath)
     
     res.json(results)
+    
   } catch (error) {
     console.error('Upload error:', error)
     res.status(500).json({
@@ -68,6 +80,7 @@ export default async function handler(req, res) {
     })
   }
 }
+
 
 async function processStudentCSV(filePath, schoolId) {
   console.log('Starting CSV processing for school:', schoolId)
