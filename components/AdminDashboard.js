@@ -1173,512 +1173,6 @@ function SchoolSettingsTab({ user }) {
   )
 }
 
-// // Enhanced StudentsTab Component
-// function StudentsTab({ students, onRefresh, user }) {
-//   const [searchTerm, setSearchTerm] = useState('')
-//   const [filterStatus, setFilterStatus] = useState('all')
-//   const [selectedGrade, setSelectedGrade] = useState('')
-//   const [loading, setLoading] = useState(false)
-//   const [showModal, setShowModal] = useState(false)
-//   const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
-//   const [selectedStudent, setSelectedStudent] = useState(null)
-//   const [grades, setGrades] = useState([])
-  
-//   const [studentForm, setStudentForm] = useState({
-//     name: '',
-//     grade: '',
-//     student_code: '',
-//     parent_password: '',
-//     is_active: true
-//   })
-
-//   // Extract unique grades from students
-//   useEffect(() => {
-//     const uniqueGrades = [...new Set(students.map(s => s.grade).filter(Boolean))].sort()
-//     setGrades(uniqueGrades)
-//   }, [students])
-
-//   const filteredStudents = students.filter(student => {
-//     const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-//                          student.studentCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-//                          student.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-//     const matchesFilter = filterStatus === 'all' ||
-//                          (filterStatus === 'with_password' && (student.parentPasswordSet || student.parent_password_set)) ||
-//                          (filterStatus === 'without_password' && !(student.parentPasswordSet || student.parent_password_set)) ||
-//                          (filterStatus === 'active' && student.is_active !== false) ||
-//                          (filterStatus === 'inactive' && student.is_active === false)
-    
-//     const matchesGrade = !selectedGrade || student.grade === selectedGrade
-    
-//     return matchesSearch && matchesFilter && matchesGrade
-//   })
-
-//   const resetForm = () => {
-//     setStudentForm({
-//       name: '',
-//       grade: '',
-//       student_code: '',
-//       parent_password: '',
-//       is_active: true
-//     })
-//   }
-
-//   // Modal handlers
-//   const openModal = (type, student = null) => {
-//     setModalType(type)
-//     setSelectedStudent(student)
-    
-//     if (type === 'edit' && student) {
-//       setStudentForm({
-//         name: student.name || '',
-//         grade: student.grade || '',
-//         student_code: student.student_code || student.studentCode || '',
-//         parent_password: '',
-//         is_active: student.is_active !== false
-//       })
-//     } else if (type === 'add') {
-//       resetForm()
-//       if (selectedGrade) {
-//         setStudentForm(prev => ({ ...prev, grade: selectedGrade }))
-//       }
-//     }
-    
-//     setShowModal(true)
-//   }
-
-//   const closeModal = () => {
-//     setShowModal(false)
-//     setModalType('')
-//     setSelectedStudent(null)
-//     resetForm()
-//   }
-
-//   // CRUD operations
-//   const handleSave = async (e) => {
-//     e.preventDefault()
-    
-//     if (!studentForm.name.trim()) {
-//       alert('Student name is required')
-//       return
-//     }
-
-//     setLoading(true)
-    
-//     try {
-//       let response
-      
-//       if (modalType === 'add') {
-//         response = await fetch('/api/students', {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify({
-//             ...studentForm,
-//             school_id: user.school_id || user.SchoolID,
-//             name: studentForm.name.trim()
-//           })
-//         })
-//       } else if (modalType === 'edit') {
-//         response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
-//           method: 'PUT',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify(studentForm)
-//         })
-//       }
-
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         closeModal()
-//         onRefresh()
-//         alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
-//       } else {
-//         alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
-//       }
-//     } catch (error) {
-//       console.error(`${modalType} student error:`, error)
-//       alert(`Failed to ${modalType} student: Network error`)
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   const handleDelete = async (force = false) => {
-//     setLoading(true)
-    
-//     try {
-//       const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
-//         method: 'DELETE',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ force_delete: force })
-//       })
-
-//       const result = await response.json()
-      
-//       if (result.success) {
-//         closeModal()
-//         onRefresh()
-//         alert(result.message || 'Student deleted successfully!')
-//       } else {
-//         alert('Failed to delete student: ' + (result.error || 'Unknown error'))
-//       }
-//     } catch (error) {
-//       console.error('Delete student error:', error)
-//       alert('Failed to delete student: Network error')
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   return (
-//     <div>
-//       {/* Header */}
-//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-//         <div>
-//           <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
-//           <p className="text-gray-600 text-sm">
-//             {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
-//             ({filteredStudents.length} of {students.length} total)
-//           </p>
-//         </div>
-//         <div className="flex flex-col sm:flex-row gap-2">
-//           <button 
-//             onClick={onRefresh} 
-//             disabled={loading}
-//             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
-//           >
-//             {loading ? 'Loading...' : 'Refresh'}
-//           </button>
-//           <button 
-//             onClick={() => openModal('add')}
-//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
-//           >
-//             Add Student
-//           </button>
-//         </div>
-//       </div>
-
-//       {/* Filters */}
-//       <div className="flex flex-col sm:flex-row gap-4 mb-6">
-//         <div className="flex-1">
-//           <input
-//             type="text"
-//             placeholder="Search by name or student code..."
-//             value={searchTerm}
-//             onChange={(e) => setSearchTerm(e.target.value)}
-//             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-//           />
-//         </div>
-        
-//         {/* Grade Filter */}
-//         {grades.length > 0 && (
-//           <select
-//             value={selectedGrade}
-//             onChange={(e) => setSelectedGrade(e.target.value)}
-//             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
-//           >
-//             <option value="">All Grades</option>
-//             {grades.map((grade) => (
-//               <option key={grade} value={grade}>
-//                 Grade {grade}
-//               </option>
-//             ))}
-//           </select>
-//         )}
-        
-//         <select
-//           value={filterStatus}
-//           onChange={(e) => setFilterStatus(e.target.value)}
-//           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
-//         >
-//           <option value="all">All Students</option>
-//           <option value="active">Active Students</option>
-//           <option value="inactive">Inactive Students</option>
-//           <option value="with_password">With Parent Password</option>
-//           <option value="without_password">Need Parent Setup</option>
-//         </select>
-//       </div>
-
-//       {/* Students Table */}
-//       <div className="overflow-x-auto -mx-4 sm:mx-0">
-//         <div className="inline-block min-w-full align-middle">
-//           <table className="min-w-full divide-y divide-gray-200">
-//             <thead className="bg-gray-50">
-//               <tr>
-//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Student
-//                 </th>
-//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Grade
-//                 </th>
-//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
-//                   Student Code
-//                 </th>
-//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Status
-//                 </th>
-//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-//                   Actions
-//                 </th>
-//               </tr>
-//             </thead>
-//             <tbody className="bg-white divide-y divide-gray-200">
-//               {filteredStudents.length > 0 ? filteredStudents.map((student) => (
-//                 <tr key={student.id || student.student_id}>
-//                   <td className="px-3 sm:px-6 py-4">
-//                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
-//                     <div className="text-xs text-gray-500">ID: {student.id || student.student_id}</div>
-//                   </td>
-//                   <td className="px-3 sm:px-6 py-4">
-//                     <div className="text-sm text-gray-500">{student.grade || 'Not set'}</div>
-//                     <div className="text-xs text-gray-500">
-//                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-//                         (student.parentPasswordSet || student.parent_password_set) ? 
-//                         'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-//                       }`}>
-//                         {(student.parentPasswordSet || student.parent_password_set) ? 'Parent OK' : 'Setup needed'}
-//                       </span>
-//                     </div>
-//                   </td>
-//                   <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
-//                     <div className="text-sm font-mono text-gray-900">
-//                       {student.studentCode || student.student_code || 'Not set'}
-//                     </div>
-//                   </td>
-//                   <td className="px-3 sm:px-6 py-4">
-//                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-//                       student.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-//                     }`}>
-//                       {student.is_active !== false ? 'Active' : 'Inactive'}
-//                     </span>
-//                   </td>
-//                   <td className="px-3 sm:px-6 py-4 text-sm font-medium">
-//                     <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-//                       <button 
-//                         onClick={() => openModal('view', student)}
-//                         className="text-blue-600 hover:text-blue-900 text-xs sm:text-sm"
-//                         disabled={loading}
-//                       >
-//                         View
-//                       </button>
-//                       <button 
-//                         onClick={() => openModal('edit', student)}
-//                         className="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm"
-//                         disabled={loading}
-//                       >
-//                         Edit
-//                       </button>
-//                       <button 
-//                         onClick={() => openModal('delete', student)}
-//                         className="text-red-600 hover:text-red-900 text-xs sm:text-sm"
-//                         disabled={loading}
-//                       >
-//                         Delete
-//                       </button>
-//                     </div>
-//                   </td>
-//                 </tr>
-//               )) : (
-//                 <tr>
-//                   <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-//                     {selectedGrade ? `No students found in Grade ${selectedGrade}` : 'No students found'}
-//                   </td>
-//                 </tr>
-//               )}
-//             </tbody>
-//           </table>
-//         </div>
-//       </div>
-
-//       {/* Grade Summary Cards */}
-//       {grades.length > 0 && (
-//         <div className="mt-6 bg-white p-4 rounded-lg shadow border">
-//           <h4 className="text-md font-medium text-gray-900 mb-3">Grade Distribution</h4>
-//           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-//             {grades.map((grade) => (
-//               <div 
-//                 key={grade}
-//                 className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
-//                   selectedGrade === grade 
-//                     ? 'bg-blue-100 border-2 border-blue-500' 
-//                     : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-//                 }`}
-//                 onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
-//               >
-//                 <div className="text-sm font-bold text-gray-900">Grade {grade}</div>
-//                 <div className="text-xs text-gray-600">
-//                   {students.filter(s => s.grade === grade).length} students
-//                 </div>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Modal */}
-//       {showModal && (
-//         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
-//           <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
-//             <div className="flex justify-between items-center mb-4">
-//               <h4 className="text-lg font-semibold text-gray-900">
-//                 {modalType === 'add' && 'Add New Student'}
-//                 {modalType === 'edit' && 'Edit Student'}
-//                 {modalType === 'delete' && 'Delete Student'}
-//                 {modalType === 'view' && 'Student Details'}
-//               </h4>
-//               <button
-//                 onClick={closeModal}
-//                 className="text-gray-400 hover:text-gray-600"
-//               >
-//                 ✕
-//               </button>
-//             </div>
-
-//             {/* Modal Content */}
-//             {(modalType === 'add' || modalType === 'edit') && (
-//               <form onSubmit={handleSave} className="space-y-4">
-//                 <div>
-//                   <label className="block text-sm font-medium text-gray-700 mb-1">
-//                     Student Name *
-//                   </label>
-//                   <input
-//                     type="text"
-//                     value={studentForm.name}
-//                     onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
-//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                     placeholder="Enter full name"
-//                     required
-//                   />
-//                 </div>
-
-//                 <div>
-//                   <label className="block text-sm font-medium text-gray-700 mb-1">
-//                     Grade
-//                   </label>
-//                   <input
-//                     type="text"
-//                     value={studentForm.grade}
-//                     onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
-//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                     placeholder="e.g., 10th, Grade 5"
-//                   />
-//                 </div>
-
-//                 <div>
-//                   <label className="block text-sm font-medium text-gray-700 mb-1">
-//                     Student Code
-//                   </label>
-//                   <input
-//                     type="text"
-//                     value={studentForm.student_code}
-//                     onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
-//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                     placeholder="Optional unique code"
-//                   />
-//                 </div>
-
-//                 <div>
-//                   <label className="block text-sm font-medium text-gray-700 mb-1">
-//                     Parent Password
-//                   </label>
-//                   <input
-//                     type="password"
-//                     value={studentForm.parent_password}
-//                     onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
-//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-//                     placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
-//                   />
-//                 </div>
-
-//                 <div className="flex items-center">
-//                   <input
-//                     type="checkbox"
-//                     checked={studentForm.is_active}
-//                     onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
-//                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-//                   />
-//                   <label className="ml-2 block text-sm text-gray-900">Active</label>
-//                 </div>
-
-//                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
-//                   <button
-//                     type="submit"
-//                     disabled={loading}
-//                     className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-//                   >
-//                     {loading ? (modalType === 'add' ? 'Adding...' : 'Updating...') : (modalType === 'add' ? 'Add Student' : 'Update Student')}
-//                   </button>
-//                   <button
-//                     type="button"
-//                     onClick={closeModal}
-//                     disabled={loading}
-//                     className="w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
-//                   >
-//                     Cancel
-//                   </button>
-//                 </div>
-//               </form>
-//             )}
-
-//             {modalType === 'view' && selectedStudent && (
-//               <div className="space-y-3">
-//                 <p><strong>Name:</strong> {selectedStudent.name}</p>
-//                 <p><strong>Student ID:</strong> {selectedStudent.id || selectedStudent.student_id}</p>
-//                 <p><strong>Grade:</strong> {selectedStudent.grade || 'Not set'}</p>
-//                 <p><strong>Student Code:</strong> {selectedStudent.student_code || selectedStudent.studentCode || 'Not set'}</p>
-//                 <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
-//                 <p><strong>Parent Password:</strong> {(selectedStudent.parentPasswordSet || selectedStudent.parent_password_set) ? 'Set' : 'Not set'}</p>
-//                 <p><strong>Last Activity:</strong> {
-//                   selectedStudent.last_activity 
-//                     ? new Date(selectedStudent.last_activity).toLocaleString()
-//                     : 'No activity'
-//                 }</p>
-//                 <div className="flex justify-end mt-6">
-//                   <button
-//                     onClick={closeModal}
-//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-//                   >
-//                     Close
-//                   </button>
-//                 </div>
-//               </div>
-//             )}
-
-//             {modalType === 'delete' && selectedStudent && (
-//               <div>
-//                 <p className="text-gray-700 mb-4">
-//                   Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
-//                 </p>
-//                 <div className="flex justify-end space-x-3">
-//                   <button
-//                     onClick={closeModal}
-//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-//                   >
-//                     Cancel
-//                   </button>
-//                   <button
-//                     onClick={() => handleDelete(false)}
-//                     className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
-//                     disabled={loading}
-//                   >
-//                     {loading ? 'Processing...' : 'Deactivate'}
-//                   </button>
-//                   <button
-//                     onClick={() => handleDelete(true)}
-//                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-//                     disabled={loading}
-//                   >
-//                     {loading ? 'Processing...' : 'Force Delete'}
-//                   </button>
-//                 </div>
-//               </div>
-//             )}
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   )
-// }
 
 function StudentsTab({ students, onRefresh, user }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -2888,8 +2382,11 @@ function UploadStudentsTab({ user, onUploadComplete }) {
   const [results, setResults] = useState(null)
 
   const downloadTemplate = () => {
-    const csvContent = [
-      // Headers
+      const schoolId = user.school_id || user.SchoolID || 2  
+      const csvContent = [
+      [`# Template for School ID: ${schoolId}`, '', '', '', '', '', ''],
+      [`# Generated: ${new Date().toISOString()}`, '', '', '', '', '', ''],
+        // Headers
       ['name', 'grade', 'student_code', 'parent_name', 'parent_email', 'parent_phone', 'parent_password'],
       // Example data
       ['John Smith', '10th', 'JS001', 'Mary Smith', 'mary.smith@email.com', '+233244567890', '12345'],
@@ -2911,7 +2408,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `student_upload_template_with_parents_${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `student_upload_template_school_${schoolId}_${new Date().toISOString().split('T')[0]}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -2920,7 +2417,15 @@ function UploadStudentsTab({ user, onUploadComplete }) {
 
   const handleFileUpload = async (e) => {
     e.preventDefault()
-    
+      // DEBUG: Let's see what school IDs we have
+  console.log('=== UPLOAD DEBUG ===')
+  console.log('Full user object:', user)
+  console.log('user.school_id:', user.school_id)
+  console.log('user.SchoolID:', user.SchoolID)
+  console.log('user.school?.id:', user.school?.id)
+  console.log('Expected school ID should be:', 34) // Replace with actual expected ID
+  console.log('===================')
+
     if (!file) {
       alert('Please select a file to upload')
       return
@@ -2929,6 +2434,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('school_id', user.school_id || user.SchoolID || 2)
+
 
     setUploading(true)
     setResults(null)
@@ -3078,6 +2584,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
     </div>
   )
 }
+
 function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
