@@ -1,3 +1,14 @@
+/**
+ * The code defines an optimized API handler for analytics with database performance improvements and
+ * various functions for retrieving different types of analytics data.
+ * @param schoolId - The `schoolId` parameter is used to identify a specific school within the
+ * analytics data. It is typically an integer value that corresponds to a unique identifier for a
+ * school in the database. This parameter is often used to filter analytics results based on a specific
+ * school, allowing you to retrieve data specific to that
+ * @returns The code snippet provided is an optimized version of an API handler for analytics data. It
+ * includes functions for handling various types of analytics queries such as overview, attendance,
+ * students, schools, sync performance, trends, and real-time data.
+ */
 // pages/api/analytics.js - OPTIMIZED VERSION with Database Performance Improvements
 const { getPool, sql } = require('../../lib/database')
 
@@ -125,6 +136,151 @@ export default async function handler(req, res) {
 }
 
 // OPTIMIZED: Overview Analytics with timeout protection and memory-efficient queries
+// async function getOverviewAnalyticsOptimized(schoolId) {
+//   const pool = await getPool()
+//   const startTime = Date.now()
+  
+//   try {
+//     const request = pool.request()
+//     request.timeout = 30000 // 30 second timeout
+    
+//     let schoolFilter = ''
+//     if (schoolId) {
+//       schoolFilter = 'AND s.SchoolID = @schoolId'
+//       request.input('schoolId', sql.Int, parseInt(schoolId))
+//     }
+
+//     // OPTIMIZED: Memory-efficient query with limits
+//     const overviewResult = await request.query(`
+//       SELECT 
+//         COUNT(DISTINCT s.SchoolID) as TotalSchools,
+//         COUNT(DISTINCT CASE WHEN s.Status = 'active' THEN s.SchoolID END) as ActiveSchools,
+//         COUNT(DISTINCT st.StudentID) as TotalStudents,
+//         COUNT(DISTINCT CASE WHEN st.IsActive = 1 THEN st.StudentID END) as ActiveStudents,
+//         -- OPTIMIZED: Count unique students who checked in today (Issue #2 FIXED)
+//         COUNT(DISTINCT CASE 
+//           WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) AND a.Status = 'IN' 
+//           THEN a.StudentID 
+//         END) as TodayPresentStudents,
+//         -- Count late arrivals today
+//         COUNT(DISTINCT CASE 
+//           WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) 
+//           AND a.Status = 'IN' 
+//           AND CAST(a.ScanTime as TIME) > '08:30:00'
+//           THEN a.StudentID 
+//         END) as TodayLateStudents,
+//         -- Total records for debugging
+//         COUNT(CASE WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) THEN a.AttendanceID END) as TodayAttendanceRecords,
+//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -7, GETDATE()) THEN a.AttendanceID END) as WeekAttendance,
+//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -30, GETDATE()) THEN a.AttendanceID END) as MonthAttendance
+//       FROM Schools s
+//       LEFT JOIN Students st ON s.SchoolID = st.SchoolID
+//       LEFT JOIN (
+//         -- OPTIMIZED: Limit attendance subquery to reduce memory usage
+//         SELECT TOP 50000 StudentID, ScanTime, Status, AttendanceID
+//         FROM Attendance 
+//         WHERE ScanTime >= DATEADD(day, -30, GETDATE())
+//       ) a ON st.StudentID = a.StudentID
+//       WHERE 1=1 ${schoolFilter}
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // Calculate derived metrics
+//     const overview = overviewResult.recordset[0]
+//     const totalActiveStudents = overview.ActiveStudents || 0
+//     const presentToday = overview.TodayPresentStudents || 0
+//     const absentToday = Math.max(0, totalActiveStudents - presentToday)
+
+//     // OPTIMIZED: Separate lightweight query for sync agents
+//     const syncResult = await request.query(`
+//       SELECT 
+//         COUNT(DISTINCT sas.SchoolID) as TotalAgents,
+//         COUNT(CASE WHEN sas.LastHeartbeat > DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as OnlineAgents,
+//         COUNT(CASE WHEN sas.LastHeartbeat BETWEEN DATEADD(MINUTE, -30, GETDATE()) AND DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as WarningAgents,
+//         SUM(ISNULL(sas.TotalSynced, 0)) as TotalSynced,
+//         SUM(ISNULL(sas.TotalErrors, 0)) as TotalErrors
+//       FROM SyncAgentStatus sas
+//       WHERE EXISTS (SELECT 1 FROM Schools s WHERE s.SchoolID = sas.SchoolID ${schoolFilter.replace('AND s.', 'AND ')})
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // OPTIMIZED: Limit recent activity to prevent memory issues
+//     const activityResult = await request.query(`
+//       SELECT TOP 20
+//         a.AttendanceID,
+//         a.StudentID,
+//         st.Name as StudentName,
+//         s.SchoolID,
+//         s.Name as SchoolName,
+//         a.ScanTime,
+//         a.Status,
+//         a.CreatedAt,
+//         DATEDIFF(MINUTE, a.CreatedAt, GETDATE()) as MinutesAgo
+//       FROM Attendance a WITH (NOLOCK)
+//       JOIN Students st ON a.StudentID = st.StudentID
+//       JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE a.ScanTime > DATEADD(HOUR, -4, GETDATE()) ${schoolFilter}
+//       ORDER BY a.ScanTime DESC
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     const syncStats = syncResult.recordset[0]
+//     const queryTime = Date.now() - startTime
+
+//     console.log(`Overview analytics completed in ${queryTime}ms`)
+
+//     return {
+//       overview: {
+//         schools: {
+//           total: overview.TotalSchools || 0,
+//           active: overview.ActiveSchools || 0,
+//           inactive: (overview.TotalSchools || 0) - (overview.ActiveSchools || 0)
+//         },
+//         students: {
+//           total: overview.TotalStudents || 0,
+//           active: overview.ActiveStudents || 0,
+//           inactive: (overview.TotalStudents || 0) - (overview.ActiveStudents || 0)
+//         },
+//         attendance: {
+//           // OPTIMIZED: Now correctly shows unique students (Issue #2 FIXED)
+//           today: presentToday,
+//           absent_today: absentToday,
+//           late_today: overview.TodayLateStudents || 0,
+//           week: overview.WeekAttendance || 0,
+//           month: overview.MonthAttendance || 0,
+//           // Debug information
+//           today_records: overview.TodayAttendanceRecords || 0
+//         },
+//         sync_agents: {
+//           total: syncStats.TotalAgents || 0,
+//           online: syncStats.OnlineAgents || 0,
+//           warning: syncStats.WarningAgents || 0,
+//           offline: (syncStats.TotalAgents || 0) - (syncStats.OnlineAgents || 0) - (syncStats.WarningAgents || 0)
+//         },
+//         performance: {
+//           total_synced: syncStats.TotalSynced || 0,
+//           total_errors: syncStats.TotalErrors || 0,
+//           error_rate: (syncStats.TotalSynced + syncStats.TotalErrors) > 0 ? 
+//             Math.round((syncStats.TotalErrors / (syncStats.TotalSynced + syncStats.TotalErrors)) * 100) : 0
+//         }
+//       },
+//       current_activity: activityResult.recordset.map(row => ({
+//         attendance_id: row.AttendanceID,
+//         student_id: row.StudentID,
+//         student_name: row.StudentName,
+//         school_id: row.SchoolID,
+//         school_name: row.SchoolName,
+//         scan_time: row.ScanTime,
+//         status: row.Status,
+//         created_at: row.CreatedAt,
+//         minutes_ago: row.MinutesAgo
+//       }))
+//     }
+//   } catch (error) {
+//     console.error('Error in getOverviewAnalyticsOptimized:', error)
+//     throw error
+//   }
+// }
 async function getOverviewAnalyticsOptimized(schoolId) {
   const pool = await getPool()
   const startTime = Date.now()
@@ -139,48 +295,58 @@ async function getOverviewAnalyticsOptimized(schoolId) {
       request.input('schoolId', sql.Int, parseInt(schoolId))
     }
 
-    // OPTIMIZED: Memory-efficient query with limits
-    const overviewResult = await request.query(`
+    // FIXED: Use separate queries to ensure accurate unique student counts
+    
+    // 1. Get basic school and student counts
+    const basicStatsResult = await request.query(`
       SELECT 
         COUNT(DISTINCT s.SchoolID) as TotalSchools,
         COUNT(DISTINCT CASE WHEN s.Status = 'active' THEN s.SchoolID END) as ActiveSchools,
         COUNT(DISTINCT st.StudentID) as TotalStudents,
-        COUNT(DISTINCT CASE WHEN st.IsActive = 1 THEN st.StudentID END) as ActiveStudents,
-        -- OPTIMIZED: Count unique students who checked in today (Issue #2 FIXED)
-        COUNT(DISTINCT CASE 
-          WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) AND a.Status = 'IN' 
-          THEN a.StudentID 
-        END) as TodayPresentStudents,
-        -- Count late arrivals today
-        COUNT(DISTINCT CASE 
-          WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) 
-          AND a.Status = 'IN' 
-          AND CAST(a.ScanTime as TIME) > '08:30:00'
-          THEN a.StudentID 
-        END) as TodayLateStudents,
-        -- Total records for debugging
-        COUNT(CASE WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) THEN a.AttendanceID END) as TodayAttendanceRecords,
-        COUNT(CASE WHEN a.ScanTime > DATEADD(day, -7, GETDATE()) THEN a.AttendanceID END) as WeekAttendance,
-        COUNT(CASE WHEN a.ScanTime > DATEADD(day, -30, GETDATE()) THEN a.AttendanceID END) as MonthAttendance
+        COUNT(DISTINCT CASE WHEN st.IsActive = 1 THEN st.StudentID END) as ActiveStudents
       FROM Schools s
       LEFT JOIN Students st ON s.SchoolID = st.SchoolID
-      LEFT JOIN (
-        -- OPTIMIZED: Limit attendance subquery to reduce memory usage
-        SELECT TOP 50000 StudentID, ScanTime, Status, AttendanceID
-        FROM Attendance 
-        WHERE ScanTime >= DATEADD(day, -30, GETDATE())
-      ) a ON st.StudentID = a.StudentID
       WHERE 1=1 ${schoolFilter}
       OPTION (MAXDOP 1)
     `)
 
-    // Calculate derived metrics
-    const overview = overviewResult.recordset[0]
-    const totalActiveStudents = overview.ActiveStudents || 0
-    const presentToday = overview.TodayPresentStudents || 0
-    const absentToday = Math.max(0, totalActiveStudents - presentToday)
+    // 2. FIXED: Get unique students present today with separate query
+    const todayPresentResult = await request.query(`
+      WITH TodayFirstCheckins AS (
+        SELECT DISTINCT
+          a.StudentID,
+          MIN(a.ScanTime) as FirstCheckin,
+          CAST(MIN(a.ScanTime) as TIME) as FirstCheckinTime
+        FROM Attendance a
+        INNER JOIN Students st ON a.StudentID = st.StudentID
+        INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+        WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
+        AND a.Status = 'IN'
+        AND st.IsActive = 1
+        ${schoolFilter}
+        GROUP BY a.StudentID
+      )
+      SELECT 
+        COUNT(*) as TodayPresentStudents,
+        COUNT(CASE WHEN FirstCheckinTime > '08:30:00' THEN 1 END) as TodayLateStudents
+      FROM TodayFirstCheckins
+      OPTION (MAXDOP 1)
+    `)
 
-    // OPTIMIZED: Separate lightweight query for sync agents
+    // 3. Get attendance record counts for monitoring
+    const attendanceCountsResult = await request.query(`
+      SELECT 
+        COUNT(CASE WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) THEN a.AttendanceID END) as TodayAttendanceRecords,
+        COUNT(CASE WHEN a.ScanTime > DATEADD(day, -7, GETDATE()) THEN a.AttendanceID END) as WeekAttendance,
+        COUNT(CASE WHEN a.ScanTime > DATEADD(day, -30, GETDATE()) THEN a.AttendanceID END) as MonthAttendance
+      FROM Attendance a WITH (NOLOCK)
+      INNER JOIN Students st ON a.StudentID = st.StudentID
+      INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+      WHERE 1=1 ${schoolFilter}
+      OPTION (MAXDOP 1)
+    `)
+
+    // 4. Get sync agent status
     const syncResult = await request.query(`
       SELECT 
         COUNT(DISTINCT sas.SchoolID) as TotalAgents,
@@ -193,7 +359,7 @@ async function getOverviewAnalyticsOptimized(schoolId) {
       OPTION (MAXDOP 1)
     `)
 
-    // OPTIMIZED: Limit recent activity to prevent memory issues
+    // 5. Get recent activity (limited)
     const activityResult = await request.query(`
       SELECT TOP 20
         a.AttendanceID,
@@ -213,32 +379,43 @@ async function getOverviewAnalyticsOptimized(schoolId) {
       OPTION (MAXDOP 1)
     `)
 
+    // Combine results
+    const basicStats = basicStatsResult.recordset[0]
+    const todayStats = todayPresentResult.recordset[0]
+    const attendanceCounts = attendanceCountsResult.recordset[0]
     const syncStats = syncResult.recordset[0]
-    const queryTime = Date.now() - startTime
+    
+    // Calculate derived metrics
+    const totalActiveStudents = basicStats.ActiveStudents || 0
+    const presentToday = todayStats.TodayPresentStudents || 0
+    const absentToday = Math.max(0, totalActiveStudents - presentToday)
 
-    console.log(`Overview analytics completed in ${queryTime}ms`)
+    const queryTime = Date.now() - startTime
+    console.log(`FIXED Overview analytics completed in ${queryTime}ms`)
+    console.log(`Present today: ${presentToday} unique students out of ${totalActiveStudents} active students`)
 
     return {
       overview: {
         schools: {
-          total: overview.TotalSchools || 0,
-          active: overview.ActiveSchools || 0,
-          inactive: (overview.TotalSchools || 0) - (overview.ActiveSchools || 0)
+          total: basicStats.TotalSchools || 0,
+          active: basicStats.ActiveSchools || 0,
+          inactive: (basicStats.TotalSchools || 0) - (basicStats.ActiveSchools || 0)
         },
         students: {
-          total: overview.TotalStudents || 0,
-          active: overview.ActiveStudents || 0,
-          inactive: (overview.TotalStudents || 0) - (overview.ActiveStudents || 0)
+          total: basicStats.TotalStudents || 0,
+          active: totalActiveStudents,
+          inactive: (basicStats.TotalStudents || 0) - totalActiveStudents
         },
         attendance: {
-          // OPTIMIZED: Now correctly shows unique students (Issue #2 FIXED)
+          // FIXED: Now correctly shows unique students present today
           today: presentToday,
           absent_today: absentToday,
-          late_today: overview.TodayLateStudents || 0,
-          week: overview.WeekAttendance || 0,
-          month: overview.MonthAttendance || 0,
+          late_today: todayStats.TodayLateStudents || 0,
+          week: attendanceCounts.WeekAttendance || 0,
+          month: attendanceCounts.MonthAttendance || 0,
           // Debug information
-          today_records: overview.TodayAttendanceRecords || 0
+          today_records: attendanceCounts.TodayAttendanceRecords || 0,
+          attendance_rate: totalActiveStudents > 0 ? Math.round((presentToday / totalActiveStudents) * 100) : 0
         },
         sync_agents: {
           total: syncStats.TotalAgents || 0,
@@ -263,10 +440,17 @@ async function getOverviewAnalyticsOptimized(schoolId) {
         status: row.Status,
         created_at: row.CreatedAt,
         minutes_ago: row.MinutesAgo
-      }))
+      })),
+      debug_info: {
+        query_type: 'fixed_unique_count',
+        total_active_students: totalActiveStudents,
+        unique_present_today: presentToday,
+        attendance_records_today: attendanceCounts.TodayAttendanceRecords,
+        calculation_method: 'CTE with MIN() to get first check-in per student'
+      }
     }
   } catch (error) {
-    console.error('Error in getOverviewAnalyticsOptimized:', error)
+    console.error('Error in FIXED getOverviewAnalyticsOptimized:', error)
     throw error
   }
 }

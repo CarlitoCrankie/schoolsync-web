@@ -593,216 +593,164 @@ async function getNextStudentId(transaction, schoolId) {
   return customStudentId
 }
 
+
 // async function processStudentRow(pool, studentData, schoolId, rowNumber) {
-//   console.log(`Row ${rowNumber} - School ID received:`, schoolId)
-//   console.log(`Row ${rowNumber} - School ID type:`, typeof schoolId)
+//   const studentName = studentData.name?.trim()
+//   const grade = studentData.grade?.trim()
+//   const parentName = studentData.parent_name?.trim()
+//   const parentEmail = studentData.parent_email?.trim()
+//   const parentPhone = studentData.parent_phone?.trim()
+//   const parentPassword = studentData.parent_password?.trim() || '12345'
   
-//   const {
-//     name,
-//     grade,
-//     student_code,
-//     parent_name,
-//     parent_email,
-//     parent_phone,
-//     parent_password
-//   } = studentData
-
-//   const warnings = []
-//   let studentAdded = false
-//   let studentUpdated = false
-//   let parentCreated = false
-//   let parentUpdated = false
-//   let defaultPasswordSet = false
-
-//   // Validate required fields
-//   if (!name || name.trim() === '') {
+//   if (!studentName) {
 //     throw new Error('Student name is required')
 //   }
 
-//   // Use default password if not provided
-//   const finalParentPassword = parent_password && parent_password.trim() !== '' ? parent_password.trim() : '12345'
-//   const hashedPassword = hashPassword(finalParentPassword)
-
-//   // Start transaction
-//   const transaction = new sql.Transaction(pool)
-//   await transaction.begin()
-
 //   try {
-//     // Check for existing student by name in this school
-//     const existingStudent = await transaction.request()
-//       .input('name', sql.NVarChar, name.trim())
+//     // Check if student exists
+//     const existingStudent = await pool.request()
+//       .input('name', sql.NVarChar, studentName)
 //       .input('schoolId', sql.Int, schoolId)
-//       .query(`
-//         SELECT StudentID, ParentPasswordSet, Name
-//         FROM Students 
-//         WHERE SchoolID = @schoolId AND Name = @name
-//       `)
-
-//     console.log(`Row ${rowNumber} - Looking for: "${name.trim()}" in school ${schoolId}`)
-//     console.log(`Row ${rowNumber} - Found existing: ${existingStudent.recordset.length > 0}`)
-
+//       .query('SELECT StudentID, Grade FROM Students WHERE Name = @name AND SchoolID = @schoolId')
+    
 //     let studentId
-
+//     let studentAdded = false
+//     let studentUpdated = false
+    
 //     if (existingStudent.recordset.length > 0) {
-//       // Update existing student
 //       studentId = existingStudent.recordset[0].StudentID
-//       const hasExistingPassword = existingStudent.recordset[0].ParentPasswordSet
-
+      
+//       // Update student grade and password if provided
 //       const updateFields = []
-//       const request = transaction.request()
-//       request.input('studentId', sql.Int, studentId)
-
-//       if (grade && grade.trim() !== '') {
+//       const updateRequest = pool.request().input('studentId', sql.Int, studentId)
+      
+//       if (grade) {
 //         updateFields.push('Grade = @grade')
-//         request.input('grade', sql.NVarChar, grade.trim())
+//         updateRequest.input('grade', sql.NVarChar, grade)
 //       }
-
-//       if (student_code && student_code.trim() !== '') {
-//         updateFields.push('StudentCode = @studentCode')
-//         request.input('studentCode', sql.NVarChar, student_code.trim())
-//       }
-
-//       // Only set password if not already set
-//       if (!hasExistingPassword) {
-//         updateFields.push('ParentPasswordHash = @passwordHash')
-//         updateFields.push('ParentPasswordSet = 1')
-//         request.input('passwordHash', sql.NVarChar, hashedPassword)
-//         defaultPasswordSet = true
-//       }
-
+      
+//       // Always update parent password
+//       updateFields.push('ParentPasswordHash = @passwordHash')
+//       updateFields.push('ParentPasswordSet = 1')
+//       updateRequest.input('passwordHash', sql.NVarChar, hashPassword(parentPassword))
+      
 //       if (updateFields.length > 0) {
-//         await request.query(`
-//           UPDATE Students 
-//           SET ${updateFields.join(', ')}
-//           WHERE StudentID = @studentId
-//         `)
+//         await updateRequest.query(`UPDATE Students SET ${updateFields.join(', ')} WHERE StudentID = @studentId`)
 //         studentUpdated = true
 //       }
-
-//       if (hasExistingPassword && finalParentPassword === '12345') {
-//         warnings.push(`Row ${rowNumber}: Student "${name}" already has a password set, skipping password update`)
-//       }
-
+      
 //     } else {
-//       // Create new student with custom StudentID
-//       studentId = await getNextStudentId(transaction, schoolId)
-      
-//       console.log(`Row ${rowNumber} - Generated StudentID: ${studentId} for school ${schoolId}`)
-      
-//       await transaction.request()
-//         .input('studentId', sql.Int, studentId)
-//         .input('name', sql.NVarChar, name.trim())
+//       // Create new student
+//       const insertResult = await pool.request()
+//         .input('name', sql.NVarChar, studentName)
 //         .input('schoolId', sql.Int, schoolId)
-//         .input('grade', sql.NVarChar, grade ? grade.trim() : null)
-//         .input('studentCode', sql.NVarChar, student_code ? student_code.trim() : null)
-//         .input('passwordHash', sql.NVarChar, hashedPassword)
+//         .input('grade', sql.NVarChar, grade || null)
+//         .input('passwordHash', sql.NVarChar, hashPassword(parentPassword))
 //         .query(`
-//           INSERT INTO Students (StudentID, Name, SchoolID, Grade, StudentCode, ParentPasswordHash, ParentPasswordSet, IsActive, CreatedAt)
-//           VALUES (@studentId, @name, @schoolId, @grade, @studentCode, @passwordHash, 1, 1, GETDATE())
+//           INSERT INTO Students (Name, SchoolID, Grade, IsActive, CreatedAt, ParentPasswordHash, ParentPasswordSet)
+//           OUTPUT INSERTED.StudentID
+//           VALUES (@name, @schoolId, @grade, 1, GETDATE(), @passwordHash, 1)
 //         `)
-
+      
+//       studentId = insertResult.recordset[0].StudentID
 //       studentAdded = true
-//       defaultPasswordSet = true
-      
-//       // Verify what was actually inserted
-//       const verifyStudent = await transaction.request()
-//         .input('studentId', sql.Int, studentId)
-//         .query('SELECT StudentID, Name, SchoolID FROM Students WHERE StudentID = @studentId')
-      
-//       console.log(`Row ${rowNumber} - VERIFICATION - Student saved with SchoolID:`, verifyStudent.recordset[0]?.SchoolID)
-//       console.log(`Row ${rowNumber} - VERIFICATION - Student saved with StudentID:`, verifyStudent.recordset[0]?.StudentID)
 //     }
 
-//     // Handle parent information
-//     if (parent_name || parent_email || parent_phone) {
-//       const existingParent = await transaction.request()
+//     // Handle parent information - ALWAYS process if any parent data exists
+//     let parentCreated = false
+//     let parentUpdated = false
+    
+//     if (parentName || parentEmail || parentPhone) {
+//       // Check if parent exists for this student
+//       const existingParent = await pool.request()
 //         .input('studentId', sql.Int, studentId)
-//         .query('SELECT ParentID FROM Parents WHERE StudentID = @studentId')
-
+//         .query('SELECT ParentID, Name, Email, PhoneNumber FROM Parents WHERE StudentID = @studentId')
+      
 //       if (existingParent.recordset.length > 0) {
-//         // Update existing parent
+//         // Update existing parent - only update fields that have values
 //         const parentUpdateFields = []
-//         const parentRequest = transaction.request()
-//         parentRequest.input('studentId', sql.Int, studentId)
-
-//         if (parent_name && parent_name.trim() !== '') {
+//         const parentRequest = pool.request().input('parentId', sql.Int, existingParent.recordset[0].ParentID)
+        
+//         if (parentName) {
 //           parentUpdateFields.push('Name = @parentName')
-//           parentRequest.input('parentName', sql.NVarChar, parent_name.trim())
+//           parentRequest.input('parentName', sql.NVarChar, parentName)
 //         }
-
-//         if (parent_email && parent_email.trim() !== '') {
+//         if (parentEmail) {
 //           parentUpdateFields.push('Email = @parentEmail')
-//           parentRequest.input('parentEmail', sql.NVarChar, parent_email.trim())
+//           parentRequest.input('parentEmail', sql.NVarChar, parentEmail)
 //         }
-
-//         if (parent_phone && parent_phone.trim() !== '') {
+//         if (parentPhone) {
 //           parentUpdateFields.push('PhoneNumber = @parentPhone')
-//           parentRequest.input('parentPhone', sql.NVarChar, parent_phone.trim())
+//           parentRequest.input('parentPhone', sql.NVarChar, parentPhone)
 //         }
-
+        
 //         if (parentUpdateFields.length > 0) {
-//           await parentRequest.query(`
-//             UPDATE Parents 
-//             SET ${parentUpdateFields.join(', ')}
-//             WHERE StudentID = @studentId
-//           `)
+//           await parentRequest.query(`UPDATE Parents SET ${parentUpdateFields.join(', ')} WHERE ParentID = @parentId`)
 //           parentUpdated = true
+//           console.log(`Row ${rowNumber} - Updated parent for student ${studentName}`)
 //         }
-
+        
 //       } else {
-//         // Create new parent record
-//         await transaction.request()
-//           .input('studentId', sql.Int, studentId)
-//           .input('parentName', sql.NVarChar, parent_name ? parent_name.trim() : 'Parent/Guardian')
-//           .input('parentEmail', sql.NVarChar, parent_email ? parent_email.trim() : null)
-//           .input('parentPhone', sql.NVarChar, parent_phone ? parent_phone.trim() : null)
-//           .query(`
-//             INSERT INTO Parents (StudentID, Name, Email, PhoneNumber, IsPrimary, CreatedAt)
-//             VALUES (@studentId, @parentName, @parentEmail, @parentPhone, 1, GETDATE())
-//           `)
-//         parentCreated = true
+//         // Create new parent record with error checking
+//         try {
+//           const insertResult = await pool.request()
+//             .input('studentId', sql.Int, studentId)
+//             .input('parentName', sql.NVarChar, parentName || 'Parent/Guardian')
+//             .input('parentEmail', sql.NVarChar, parentEmail || null)
+//             .input('parentPhone', sql.NVarChar, parentPhone || null)
+//             .query(`
+//               INSERT INTO Parents (StudentID, Name, Email, PhoneNumber, IsPrimary, CreatedAt)
+//               OUTPUT INSERTED.ParentID
+//               VALUES (@studentId, @parentName, @parentEmail, @parentPhone, 1, GETDATE())
+//             `)
+          
+//           const parentId = insertResult.recordset[0]?.ParentID
+//           if (parentId) {
+//             parentCreated = true
+//             console.log(`Row ${rowNumber} - Created parent ID ${parentId} for student ${studentName}`)
+//           } else {
+//             console.error(`Row ${rowNumber} - Failed to create parent for student ${studentName}`)
+//           }
+//         } catch (parentError) {
+//           console.error(`Row ${rowNumber} - Parent creation error for ${studentName}:`, parentError.message)
+//           // Don't throw - continue processing other students
+//         }
 //       }
 //     }
 
-//     // Commit transaction and disable IDENTITY_INSERT
-//     await transaction.request().query('SET IDENTITY_INSERT Students OFF')
-//     await transaction.commit()
+//     // Debug logging
+//     console.log(`Row ${rowNumber} - ${studentName}: Student ${studentAdded ? 'added' : studentUpdated ? 'updated' : 'no change'}, Parent ${parentCreated ? 'created' : parentUpdated ? 'updated' : 'no change'}`)
 
 //     // Generate status message
-//     let status = []
-//     if (studentAdded) status.push('Student created')
-//     if (studentUpdated) status.push('Student updated')
-//     if (parentCreated) status.push('Parent created')
-//     if (parentUpdated) status.push('Parent updated')
-//     if (defaultPasswordSet) status.push('Default password set')
+//     const statusParts = []
+//     if (studentAdded) statusParts.push('Student created')
+//     if (studentUpdated) statusParts.push('Student updated')
+//     if (parentCreated) statusParts.push('Parent created')
+//     if (parentUpdated) statusParts.push('Parent updated')
 
 //     return {
-//       status: status.join(', ') || 'No changes',
-//       details: `Processed successfully${defaultPasswordSet ? ' with default password "12345"' : ''}`,
+//       status: statusParts.join(', ') || 'No changes',
+//       details: 'Processed successfully',
 //       studentId: studentId,
 //       studentAdded,
 //       studentUpdated,
 //       parentCreated,
 //       parentUpdated,
-//       defaultPasswordSet,
-//       warnings
+//       defaultPasswordSet: true,
+//       warnings: []
 //     }
 
 //   } catch (error) {
-//     // Make sure to turn off IDENTITY_INSERT even on error
-//     try {
-//       const cleanupRequest = new sql.Request(transaction)
-//       await cleanupRequest.query('SET IDENTITY_INSERT Students OFF')
-//     } catch (cleanupError) {
-//       console.error('Error turning off IDENTITY_INSERT:', cleanupError)
-//     }
-//     await transaction.rollback()
+//     console.error(`Row ${rowNumber} error:`, error)
 //     throw error
 //   }
 // }
+// FIXED: Add student_code processing to the processStudentRow function
+
 async function processStudentRow(pool, studentData, schoolId, rowNumber) {
   const studentName = studentData.name?.trim()
   const grade = studentData.grade?.trim()
+  const studentCode = studentData.student_code?.trim() // ADD THIS LINE
   const parentName = studentData.parent_name?.trim()
   const parentEmail = studentData.parent_email?.trim()
   const parentPhone = studentData.parent_phone?.trim()
@@ -817,7 +765,7 @@ async function processStudentRow(pool, studentData, schoolId, rowNumber) {
     const existingStudent = await pool.request()
       .input('name', sql.NVarChar, studentName)
       .input('schoolId', sql.Int, schoolId)
-      .query('SELECT StudentID, Grade FROM Students WHERE Name = @name AND SchoolID = @schoolId')
+      .query('SELECT StudentID, Grade, StudentCode FROM Students WHERE Name = @name AND SchoolID = @schoolId') // ADD StudentCode to SELECT
     
     let studentId
     let studentAdded = false
@@ -826,13 +774,19 @@ async function processStudentRow(pool, studentData, schoolId, rowNumber) {
     if (existingStudent.recordset.length > 0) {
       studentId = existingStudent.recordset[0].StudentID
       
-      // Update student grade and password if provided
+      // Update student grade, student code, and password if provided
       const updateFields = []
       const updateRequest = pool.request().input('studentId', sql.Int, studentId)
       
       if (grade) {
         updateFields.push('Grade = @grade')
         updateRequest.input('grade', sql.NVarChar, grade)
+      }
+      
+      // ADD THIS: Update student code if provided
+      if (studentCode) {
+        updateFields.push('StudentCode = @studentCode')
+        updateRequest.input('studentCode', sql.NVarChar, studentCode)
       }
       
       // Always update parent password
@@ -846,23 +800,24 @@ async function processStudentRow(pool, studentData, schoolId, rowNumber) {
       }
       
     } else {
-      // Create new student
+      // Create new student - ADD StudentCode to INSERT
       const insertResult = await pool.request()
         .input('name', sql.NVarChar, studentName)
         .input('schoolId', sql.Int, schoolId)
         .input('grade', sql.NVarChar, grade || null)
+        .input('studentCode', sql.NVarChar, studentCode || null) // ADD THIS LINE
         .input('passwordHash', sql.NVarChar, hashPassword(parentPassword))
         .query(`
-          INSERT INTO Students (Name, SchoolID, Grade, IsActive, CreatedAt, ParentPasswordHash, ParentPasswordSet)
+          INSERT INTO Students (Name, SchoolID, Grade, StudentCode, IsActive, CreatedAt, ParentPasswordHash, ParentPasswordSet)
           OUTPUT INSERTED.StudentID
-          VALUES (@name, @schoolId, @grade, 1, GETDATE(), @passwordHash, 1)
+          VALUES (@name, @schoolId, @grade, @studentCode, 1, GETDATE(), @passwordHash, 1)
         `)
       
       studentId = insertResult.recordset[0].StudentID
       studentAdded = true
     }
 
-    // Handle parent information - ALWAYS process if any parent data exists
+    // Rest of the parent processing code remains the same...
     let parentCreated = false
     let parentUpdated = false
     
@@ -924,8 +879,8 @@ async function processStudentRow(pool, studentData, schoolId, rowNumber) {
       }
     }
 
-    // Debug logging
-    console.log(`Row ${rowNumber} - ${studentName}: Student ${studentAdded ? 'added' : studentUpdated ? 'updated' : 'no change'}, Parent ${parentCreated ? 'created' : parentUpdated ? 'updated' : 'no change'}`)
+    // Debug logging - ADD student code to logging
+    console.log(`Row ${rowNumber} - ${studentName} (Code: ${studentCode || 'none'}): Student ${studentAdded ? 'added' : studentUpdated ? 'updated' : 'no change'}, Parent ${parentCreated ? 'created' : parentUpdated ? 'updated' : 'no change'}`)
 
     // Generate status message
     const statusParts = []
