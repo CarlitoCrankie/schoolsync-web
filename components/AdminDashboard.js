@@ -2081,9 +2081,11 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
         params.append('school_id', user.school_id || user.SchoolID)
       }
 
-      // Add grade filter if selected
-      if (gradeFilter) {
-        params.append('grade', gradeFilter)
+      if (gradeFilter && gradeFilter.trim() !== '') {
+        // URL encode the grade value to handle spaces and special characters
+        const encodedGrade = encodeURIComponent(gradeFilter.trim())
+        params.append('grade', encodedGrade)
+        console.log('Adding grade filter:', gradeFilter, '-> encoded:', encodedGrade)
       }
 
       const response = await fetch(`/api/analytics?${params}`)

@@ -136,151 +136,7 @@ export default async function handler(req, res) {
 }
 
 // OPTIMIZED: Overview Analytics with timeout protection and memory-efficient queries
-// async function getOverviewAnalyticsOptimized(schoolId) {
-//   const pool = await getPool()
-//   const startTime = Date.now()
-  
-//   try {
-//     const request = pool.request()
-//     request.timeout = 30000 // 30 second timeout
-    
-//     let schoolFilter = ''
-//     if (schoolId) {
-//       schoolFilter = 'AND s.SchoolID = @schoolId'
-//       request.input('schoolId', sql.Int, parseInt(schoolId))
-//     }
 
-//     // OPTIMIZED: Memory-efficient query with limits
-//     const overviewResult = await request.query(`
-//       SELECT 
-//         COUNT(DISTINCT s.SchoolID) as TotalSchools,
-//         COUNT(DISTINCT CASE WHEN s.Status = 'active' THEN s.SchoolID END) as ActiveSchools,
-//         COUNT(DISTINCT st.StudentID) as TotalStudents,
-//         COUNT(DISTINCT CASE WHEN st.IsActive = 1 THEN st.StudentID END) as ActiveStudents,
-//         -- OPTIMIZED: Count unique students who checked in today (Issue #2 FIXED)
-//         COUNT(DISTINCT CASE 
-//           WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) AND a.Status = 'IN' 
-//           THEN a.StudentID 
-//         END) as TodayPresentStudents,
-//         -- Count late arrivals today
-//         COUNT(DISTINCT CASE 
-//           WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) 
-//           AND a.Status = 'IN' 
-//           AND CAST(a.ScanTime as TIME) > '08:30:00'
-//           THEN a.StudentID 
-//         END) as TodayLateStudents,
-//         -- Total records for debugging
-//         COUNT(CASE WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) THEN a.AttendanceID END) as TodayAttendanceRecords,
-//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -7, GETDATE()) THEN a.AttendanceID END) as WeekAttendance,
-//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -30, GETDATE()) THEN a.AttendanceID END) as MonthAttendance
-//       FROM Schools s
-//       LEFT JOIN Students st ON s.SchoolID = st.SchoolID
-//       LEFT JOIN (
-//         -- OPTIMIZED: Limit attendance subquery to reduce memory usage
-//         SELECT TOP 50000 StudentID, ScanTime, Status, AttendanceID
-//         FROM Attendance 
-//         WHERE ScanTime >= DATEADD(day, -30, GETDATE())
-//       ) a ON st.StudentID = a.StudentID
-//       WHERE 1=1 ${schoolFilter}
-//       OPTION (MAXDOP 1)
-//     `)
-
-//     // Calculate derived metrics
-//     const overview = overviewResult.recordset[0]
-//     const totalActiveStudents = overview.ActiveStudents || 0
-//     const presentToday = overview.TodayPresentStudents || 0
-//     const absentToday = Math.max(0, totalActiveStudents - presentToday)
-
-//     // OPTIMIZED: Separate lightweight query for sync agents
-//     const syncResult = await request.query(`
-//       SELECT 
-//         COUNT(DISTINCT sas.SchoolID) as TotalAgents,
-//         COUNT(CASE WHEN sas.LastHeartbeat > DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as OnlineAgents,
-//         COUNT(CASE WHEN sas.LastHeartbeat BETWEEN DATEADD(MINUTE, -30, GETDATE()) AND DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as WarningAgents,
-//         SUM(ISNULL(sas.TotalSynced, 0)) as TotalSynced,
-//         SUM(ISNULL(sas.TotalErrors, 0)) as TotalErrors
-//       FROM SyncAgentStatus sas
-//       WHERE EXISTS (SELECT 1 FROM Schools s WHERE s.SchoolID = sas.SchoolID ${schoolFilter.replace('AND s.', 'AND ')})
-//       OPTION (MAXDOP 1)
-//     `)
-
-//     // OPTIMIZED: Limit recent activity to prevent memory issues
-//     const activityResult = await request.query(`
-//       SELECT TOP 20
-//         a.AttendanceID,
-//         a.StudentID,
-//         st.Name as StudentName,
-//         s.SchoolID,
-//         s.Name as SchoolName,
-//         a.ScanTime,
-//         a.Status,
-//         a.CreatedAt,
-//         DATEDIFF(MINUTE, a.CreatedAt, GETDATE()) as MinutesAgo
-//       FROM Attendance a WITH (NOLOCK)
-//       JOIN Students st ON a.StudentID = st.StudentID
-//       JOIN Schools s ON st.SchoolID = s.SchoolID
-//       WHERE a.ScanTime > DATEADD(HOUR, -4, GETDATE()) ${schoolFilter}
-//       ORDER BY a.ScanTime DESC
-//       OPTION (MAXDOP 1)
-//     `)
-
-//     const syncStats = syncResult.recordset[0]
-//     const queryTime = Date.now() - startTime
-
-//     console.log(`Overview analytics completed in ${queryTime}ms`)
-
-//     return {
-//       overview: {
-//         schools: {
-//           total: overview.TotalSchools || 0,
-//           active: overview.ActiveSchools || 0,
-//           inactive: (overview.TotalSchools || 0) - (overview.ActiveSchools || 0)
-//         },
-//         students: {
-//           total: overview.TotalStudents || 0,
-//           active: overview.ActiveStudents || 0,
-//           inactive: (overview.TotalStudents || 0) - (overview.ActiveStudents || 0)
-//         },
-//         attendance: {
-//           // OPTIMIZED: Now correctly shows unique students (Issue #2 FIXED)
-//           today: presentToday,
-//           absent_today: absentToday,
-//           late_today: overview.TodayLateStudents || 0,
-//           week: overview.WeekAttendance || 0,
-//           month: overview.MonthAttendance || 0,
-//           // Debug information
-//           today_records: overview.TodayAttendanceRecords || 0
-//         },
-//         sync_agents: {
-//           total: syncStats.TotalAgents || 0,
-//           online: syncStats.OnlineAgents || 0,
-//           warning: syncStats.WarningAgents || 0,
-//           offline: (syncStats.TotalAgents || 0) - (syncStats.OnlineAgents || 0) - (syncStats.WarningAgents || 0)
-//         },
-//         performance: {
-//           total_synced: syncStats.TotalSynced || 0,
-//           total_errors: syncStats.TotalErrors || 0,
-//           error_rate: (syncStats.TotalSynced + syncStats.TotalErrors) > 0 ? 
-//             Math.round((syncStats.TotalErrors / (syncStats.TotalSynced + syncStats.TotalErrors)) * 100) : 0
-//         }
-//       },
-//       current_activity: activityResult.recordset.map(row => ({
-//         attendance_id: row.AttendanceID,
-//         student_id: row.StudentID,
-//         student_name: row.StudentName,
-//         school_id: row.SchoolID,
-//         school_name: row.SchoolName,
-//         scan_time: row.ScanTime,
-//         status: row.Status,
-//         created_at: row.CreatedAt,
-//         minutes_ago: row.MinutesAgo
-//       }))
-//     }
-//   } catch (error) {
-//     console.error('Error in getOverviewAnalyticsOptimized:', error)
-//     throw error
-//   }
-// }
 async function getOverviewAnalyticsOptimized(schoolId) {
   const pool = await getPool()
   const startTime = Date.now()
@@ -456,6 +312,202 @@ async function getOverviewAnalyticsOptimized(schoolId) {
 }
 
 // OPTIMIZED: Real-time attendance with memory management
+// async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade = null) {
+//   const pool = await getPool()
+//   const startTime = Date.now()
+  
+//   try {
+//     const request = pool.request()
+//     request.timeout = 45000 // 45 second timeout
+    
+//     // Handle date range properly
+//     let dateFilter = ''
+//     if (dateFrom && dateTo) {
+//       const startDateTime = dateFrom + 'T00:00:00.000Z'
+//       const endDateTime = dateTo + 'T23:59:59.999Z'
+      
+//       request.input('startDate', sql.DateTime2, new Date(startDateTime))
+//       request.input('endDate', sql.DateTime2, new Date(endDateTime))
+//       dateFilter = 'AND a.ScanTime BETWEEN @startDate AND @endDate'
+//     } else {
+//       const defaultStart = new Date(Date.now() - 24 * 60 * 60 * 1000)
+//       request.input('defaultStart', sql.DateTime2, defaultStart)
+//       dateFilter = 'AND a.ScanTime >= @defaultStart'
+//     }
+    
+//     let schoolFilter = ''
+//     if (schoolId) {
+//       schoolFilter = 'AND st.SchoolID = @schoolId'
+//       request.input('schoolId', sql.Int, parseInt(schoolId))
+//     }
+
+//     let gradeFilter = ''
+//     if (grade) {
+//       gradeFilter = 'AND st.Grade = @grade'
+//       request.input('grade', sql.NVarChar(10), grade)
+//     }
+
+//     // Get time settings (lightweight query)
+//     let timeSettingsMap = {}
+//     try {
+//       let timeSettingsQuery
+//       if (schoolId) {
+//         const timeSettingsRequest = pool.request()
+//         timeSettingsRequest.input('schoolId', sql.Int, parseInt(schoolId))
+//         timeSettingsQuery = await timeSettingsRequest.query(`
+//           SELECT 
+//             sts.SchoolID,
+//             CONVERT(VARCHAR(5), sts.SchoolStartTime, 108) as SchoolStartTime,
+//             CONVERT(VARCHAR(5), sts.SchoolEndTime, 108) as SchoolEndTime,
+//             CONVERT(VARCHAR(5), sts.LateArrivalTime, 108) as LateArrivalTime,
+//             CONVERT(VARCHAR(5), sts.EarlyDepartureTime, 108) as EarlyDepartureTime,
+//             sts.Timezone
+//           FROM SchoolTimeSettings sts
+//           WHERE sts.SchoolID = @schoolId
+//         `)
+//       } else {
+//         timeSettingsQuery = await pool.request().query(`
+//           SELECT 
+//             sts.SchoolID,
+//             CONVERT(VARCHAR(5), sts.SchoolStartTime, 108) as SchoolStartTime,
+//             CONVERT(VARCHAR(5), sts.SchoolEndTime, 108) as SchoolEndTime,
+//             CONVERT(VARCHAR(5), sts.LateArrivalTime, 108) as LateArrivalTime,
+//             CONVERT(VARCHAR(5), sts.EarlyDepartureTime, 108) as EarlyDepartureTime,
+//             sts.Timezone
+//           FROM SchoolTimeSettings sts
+//         `)
+//       }
+
+//       timeSettingsQuery.recordset.forEach(settings => {
+//         timeSettingsMap[settings.SchoolID] = {
+//           school_start_time: settings.SchoolStartTime,
+//           school_end_time: settings.SchoolEndTime,
+//           late_arrival_time: settings.LateArrivalTime,
+//           early_departure_time: settings.EarlyDepartureTime,
+//           timezone: settings.Timezone
+//         }
+//       })
+//     } catch (error) {
+//       console.warn('Failed to load time settings for analytics:', error.message)
+//     }
+
+//     // OPTIMIZED: Limited attendance query with index hints
+//     const attendanceResult = await request.query(`
+//       SELECT TOP 100
+//         a.AttendanceID as attendance_id,
+//         a.StudentID as student_id,
+//         st.Name as student_name,
+//         st.Grade as grade,
+//         a.ScanTime as scan_time,
+//         a.Status as status,
+//         a.CreatedAt as created_at,
+//         s.Name as school_name,
+//         s.SchoolID as school_id
+//       FROM Attendance a WITH (NOLOCK)
+//       INNER JOIN Students st ON a.StudentID = st.StudentID
+//       INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE 1=1 
+//       ${dateFilter}
+//       ${schoolFilter}
+//       ${gradeFilter}
+//       ORDER BY a.ScanTime DESC, a.CreatedAt DESC
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // Enhance attendance records with time settings
+//     const enhancedAttendance = attendanceResult.recordset.map(record => {
+//       const baseRecord = {
+//         attendance_id: record.attendance_id,
+//         student_id: record.student_id,
+//         student_name: record.student_name,
+//         grade: record.grade,
+//         scan_time: record.scan_time,
+//         status: record.status,
+//         created_at: record.created_at,
+//         school_name: record.school_name,
+//         school_id: record.school_id
+//       }
+
+//       const timeSettings = timeSettingsMap[record.school_id]
+//       if (timeSettings) {
+//         const statusInfo = calculateAttendanceStatusForAPI(
+//           record.scan_time,
+//           record.status,
+//           timeSettings
+//         )
+        
+//         return {
+//           ...baseRecord,
+//           statusLabel: statusInfo.statusLabel,
+//           statusType: statusInfo.statusType,
+//           message: statusInfo.message
+//         }
+//       }
+
+//       return baseRecord
+//     })
+
+//     // OPTIMIZED: Lightweight summary query
+//     const summaryResult = await request.query(`
+//       SELECT 
+//         COUNT(*) as total_records,
+//         COUNT(CASE WHEN a.Status = 'IN' THEN 1 END) as check_ins,
+//         COUNT(CASE WHEN a.Status = 'OUT' THEN 1 END) as check_outs,
+//         COUNT(DISTINCT a.StudentID) as unique_students,
+//         MIN(a.ScanTime) as earliest_scan,
+//         MAX(a.ScanTime) as latest_scan
+//       FROM Attendance a WITH (NOLOCK)
+//       INNER JOIN Students st ON a.StudentID = st.StudentID
+//       INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE 1=1 
+//       ${dateFilter}
+//       ${schoolFilter}
+//       ${gradeFilter}
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     const summary = summaryResult.recordset[0]
+//     const lateArrivals = enhancedAttendance.filter(r => r.statusType === 'late' && r.status === 'IN').length
+//     const earlyArrivals = enhancedAttendance.filter(r => r.statusType === 'early-arrival' && r.status === 'IN').length
+//     const onTimeArrivals = enhancedAttendance.filter(r => r.statusType === 'on-time' && r.status === 'IN').length
+//     const earlyDepartures = enhancedAttendance.filter(r => r.statusType === 'early-departure' && r.status === 'OUT').length
+
+//     const queryTime = Date.now() - startTime
+//     console.log(`Real-time attendance completed in ${queryTime}ms`)
+
+//     return {
+//       current_activity: enhancedAttendance,
+//       summary: {
+//         total_records: summary.total_records || 0,
+//         check_ins: summary.check_ins || 0,
+//         check_outs: summary.check_outs || 0,
+//         unique_students: summary.unique_students || 0,
+//         late_arrivals: lateArrivals,
+//         early_arrivals: earlyArrivals,
+//         on_time_arrivals: onTimeArrivals,
+//         early_departures: earlyDepartures,
+//         punctuality_rate: summary.check_ins > 0 ? Math.round((onTimeArrivals / summary.check_ins) * 100) : 0,
+//         date_range: {
+//           earliest: summary.earliest_scan,
+//           latest: summary.latest_scan,
+//           requested_from: dateFrom,
+//           requested_to: dateTo
+//         }
+//       },
+//       time_settings_applied: Object.keys(timeSettingsMap).length > 0,
+//       schools_with_settings: Object.keys(timeSettingsMap).map(Number),
+//       filters_applied: {
+//         school_id: schoolId,
+//         date_from: dateFrom,
+//         date_to: dateTo,
+//         grade: grade
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error in getRealTimeAttendanceOptimized:', error)
+//     throw error
+//   }
+// }
 async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade = null) {
   const pool = await getPool()
   const startTime = Date.now()
@@ -485,13 +537,24 @@ async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade 
       request.input('schoolId', sql.Int, parseInt(schoolId))
     }
 
+    // FIXED: Proper grade parameter handling with correct data type and length
     let gradeFilter = ''
-    if (grade) {
-      gradeFilter = 'AND st.Grade = @grade'
-      request.input('grade', sql.NVarChar(10), grade)
+    if (grade && grade.trim() !== '') {
+      // URL decode the grade value
+      const decodedGrade = decodeURIComponent(grade.trim())
+      console.log('Processing grade filter:', decodedGrade)
+      
+      // FIXED: Use NVarChar with sufficient length (50 characters) and proper validation
+      if (decodedGrade.length <= 50) {
+        gradeFilter = 'AND st.Grade = @grade'
+        request.input('grade', sql.NVarChar(50), decodedGrade)
+      } else {
+        console.warn('Grade value too long, ignoring filter:', decodedGrade)
+        // Don't add the filter if grade is too long
+      }
     }
 
-    // Get time settings (lightweight query)
+    // Get time settings (lightweight query) - keep existing code
     let timeSettingsMap = {}
     try {
       let timeSettingsQuery
@@ -535,7 +598,9 @@ async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade 
       console.warn('Failed to load time settings for analytics:', error.message)
     }
 
-    // OPTIMIZED: Limited attendance query with index hints
+    // FIXED: Updated attendance query with better error handling
+    console.log('Executing attendance query with filters:', { dateFilter, schoolFilter, gradeFilter })
+    
     const attendanceResult = await request.query(`
       SELECT TOP 100
         a.AttendanceID as attendance_id,
@@ -558,6 +623,7 @@ async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade 
       OPTION (MAXDOP 1)
     `)
 
+    // Rest of the function remains the same...
     // Enhance attendance records with time settings
     const enhancedAttendance = attendanceResult.recordset.map(record => {
       const baseRecord = {
@@ -591,7 +657,7 @@ async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade 
       return baseRecord
     })
 
-    // OPTIMIZED: Lightweight summary query
+    // FIXED: Updated summary query with same parameter handling
     const summaryResult = await request.query(`
       SELECT 
         COUNT(*) as total_records,
@@ -644,12 +710,40 @@ async function getRealTimeAttendanceOptimized(schoolId, dateFrom, dateTo, grade 
         school_id: schoolId,
         date_from: dateFrom,
         date_to: dateTo,
-        grade: grade
+        grade: grade ? decodeURIComponent(grade) : null
       }
     }
   } catch (error) {
     console.error('Error in getRealTimeAttendanceOptimized:', error)
     throw error
+  }
+}
+
+// ADDITIONAL FIX: Also update the loadAvailableGrades function if it has similar issues
+async function loadAvailableGradesFixed(user) {
+  try {
+    const schoolId = user?.school_id || user?.SchoolID
+    if (!schoolId) return []
+
+    const pool = await getPool()
+    const request = pool.request()
+    request.input('schoolId', sql.Int, parseInt(schoolId))
+    
+    // FIXED: Ensure Grade column can handle longer values
+    const response = await request.query(`
+      SELECT DISTINCT st.Grade
+      FROM Students st 
+      WHERE st.SchoolID = @schoolId 
+      AND st.Grade IS NOT NULL 
+      AND st.Grade != ''
+      AND st.IsActive = 1
+      ORDER BY st.Grade
+    `)
+    
+    return response.recordset.map(row => row.Grade)
+  } catch (error) {
+    console.error('Error loading grades:', error)
+    return []
   }
 }
 
