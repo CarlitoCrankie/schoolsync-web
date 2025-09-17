@@ -137,6 +137,180 @@ export default async function handler(req, res) {
 
 // OPTIMIZED: Overview Analytics with timeout protection and memory-efficient queries
 
+// async function getOverviewAnalyticsOptimized(schoolId) {
+//   const pool = await getPool()
+//   const startTime = Date.now()
+  
+//   try {
+//     const request = pool.request()
+//     request.timeout = 30000 // 30 second timeout
+    
+//     let schoolFilter = ''
+//     if (schoolId) {
+//       schoolFilter = 'AND s.SchoolID = @schoolId'
+//       request.input('schoolId', sql.Int, parseInt(schoolId))
+//     }
+
+//     // FIXED: Use separate queries to ensure accurate unique student counts
+    
+//     // 1. Get basic school and student counts
+//     const basicStatsResult = await request.query(`
+//       SELECT 
+//         COUNT(DISTINCT s.SchoolID) as TotalSchools,
+//         COUNT(DISTINCT CASE WHEN s.Status = 'active' THEN s.SchoolID END) as ActiveSchools,
+//         COUNT(DISTINCT st.StudentID) as TotalStudents,
+//         COUNT(DISTINCT CASE WHEN st.IsActive = 1 THEN st.StudentID END) as ActiveStudents
+//       FROM Schools s
+//       LEFT JOIN Students st ON s.SchoolID = st.SchoolID
+//       WHERE 1=1 ${schoolFilter}
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // 2. FIXED: Get unique students present today with separate query
+//     const todayPresentResult = await request.query(`
+//       WITH TodayFirstCheckins AS (
+//         SELECT DISTINCT
+//           a.StudentID,
+//           MIN(a.ScanTime) as FirstCheckin,
+//           CAST(MIN(a.ScanTime) as TIME) as FirstCheckinTime
+//         FROM Attendance a
+//         INNER JOIN Students st ON a.StudentID = st.StudentID
+//         INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+//         WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
+//         AND a.Status = 'IN'
+//         AND st.IsActive = 1
+//         ${schoolFilter}
+//         GROUP BY a.StudentID
+//       )
+//       SELECT 
+//         COUNT(*) as TodayPresentStudents,
+//         COUNT(CASE WHEN FirstCheckinTime > '08:30:00' THEN 1 END) as TodayLateStudents
+//       FROM TodayFirstCheckins
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // 3. Get attendance record counts for monitoring
+//     const attendanceCountsResult = await request.query(`
+//       SELECT 
+//         COUNT(CASE WHEN CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE) THEN a.AttendanceID END) as TodayAttendanceRecords,
+//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -7, GETDATE()) THEN a.AttendanceID END) as WeekAttendance,
+//         COUNT(CASE WHEN a.ScanTime > DATEADD(day, -30, GETDATE()) THEN a.AttendanceID END) as MonthAttendance
+//       FROM Attendance a WITH (NOLOCK)
+//       INNER JOIN Students st ON a.StudentID = st.StudentID
+//       INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE 1=1 ${schoolFilter}
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // 4. Get sync agent status
+//     const syncResult = await request.query(`
+//       SELECT 
+//         COUNT(DISTINCT sas.SchoolID) as TotalAgents,
+//         COUNT(CASE WHEN sas.LastHeartbeat > DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as OnlineAgents,
+//         COUNT(CASE WHEN sas.LastHeartbeat BETWEEN DATEADD(MINUTE, -30, GETDATE()) AND DATEADD(MINUTE, -10, GETDATE()) THEN 1 END) as WarningAgents,
+//         SUM(ISNULL(sas.TotalSynced, 0)) as TotalSynced,
+//         SUM(ISNULL(sas.TotalErrors, 0)) as TotalErrors
+//       FROM SyncAgentStatus sas
+//       WHERE EXISTS (SELECT 1 FROM Schools s WHERE s.SchoolID = sas.SchoolID ${schoolFilter.replace('AND s.', 'AND ')})
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // 5. Get recent activity (limited)
+//     const activityResult = await request.query(`
+//       SELECT TOP 20
+//         a.AttendanceID,
+//         a.StudentID,
+//         st.Name as StudentName,
+//         s.SchoolID,
+//         s.Name as SchoolName,
+//         a.ScanTime,
+//         a.Status,
+//         a.CreatedAt,
+//         DATEDIFF(MINUTE, a.CreatedAt, GETDATE()) as MinutesAgo
+//       FROM Attendance a WITH (NOLOCK)
+//       JOIN Students st ON a.StudentID = st.StudentID
+//       JOIN Schools s ON st.SchoolID = s.SchoolID
+//       WHERE a.ScanTime > DATEADD(HOUR, -4, GETDATE()) ${schoolFilter}
+//       ORDER BY a.ScanTime DESC
+//       OPTION (MAXDOP 1)
+//     `)
+
+//     // Combine results
+//     const basicStats = basicStatsResult.recordset[0]
+//     const todayStats = todayPresentResult.recordset[0]
+//     const attendanceCounts = attendanceCountsResult.recordset[0]
+//     const syncStats = syncResult.recordset[0]
+    
+//     // Calculate derived metrics
+//     const totalActiveStudents = basicStats.ActiveStudents || 0
+//     const presentToday = todayStats.TodayPresentStudents || 0
+//     const absentToday = Math.max(0, totalActiveStudents - presentToday)
+
+//     const queryTime = Date.now() - startTime
+//     console.log(`FIXED Overview analytics completed in ${queryTime}ms`)
+//     console.log(`Present today: ${presentToday} unique students out of ${totalActiveStudents} active students`)
+
+//     return {
+//       overview: {
+//         schools: {
+//           total: basicStats.TotalSchools || 0,
+//           active: basicStats.ActiveSchools || 0,
+//           inactive: (basicStats.TotalSchools || 0) - (basicStats.ActiveSchools || 0)
+//         },
+//         students: {
+//           total: basicStats.TotalStudents || 0,
+//           active: totalActiveStudents,
+//           inactive: (basicStats.TotalStudents || 0) - totalActiveStudents
+//         },
+//         attendance: {
+//           // FIXED: Now correctly shows unique students present today
+//           today: presentToday,
+//           absent_today: absentToday,
+//           late_today: todayStats.TodayLateStudents || 0,
+//           week: attendanceCounts.WeekAttendance || 0,
+//           month: attendanceCounts.MonthAttendance || 0,
+//           // Debug information
+//           today_records: attendanceCounts.TodayAttendanceRecords || 0,
+//           attendance_rate: totalActiveStudents > 0 ? Math.round((presentToday / totalActiveStudents) * 100) : 0
+//         },
+//         sync_agents: {
+//           total: syncStats.TotalAgents || 0,
+//           online: syncStats.OnlineAgents || 0,
+//           warning: syncStats.WarningAgents || 0,
+//           offline: (syncStats.TotalAgents || 0) - (syncStats.OnlineAgents || 0) - (syncStats.WarningAgents || 0)
+//         },
+//         performance: {
+//           total_synced: syncStats.TotalSynced || 0,
+//           total_errors: syncStats.TotalErrors || 0,
+//           error_rate: (syncStats.TotalSynced + syncStats.TotalErrors) > 0 ? 
+//             Math.round((syncStats.TotalErrors / (syncStats.TotalSynced + syncStats.TotalErrors)) * 100) : 0
+//         }
+//       },
+//       current_activity: activityResult.recordset.map(row => ({
+//         attendance_id: row.AttendanceID,
+//         student_id: row.StudentID,
+//         student_name: row.StudentName,
+//         school_id: row.SchoolID,
+//         school_name: row.SchoolName,
+//         scan_time: row.ScanTime,
+//         status: row.Status,
+//         created_at: row.CreatedAt,
+//         minutes_ago: row.MinutesAgo
+//       })),
+//       debug_info: {
+//         query_type: 'fixed_unique_count',
+//         total_active_students: totalActiveStudents,
+//         unique_present_today: presentToday,
+//         attendance_records_today: attendanceCounts.TodayAttendanceRecords,
+//         calculation_method: 'CTE with MIN() to get first check-in per student'
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error in FIXED getOverviewAnalyticsOptimized:', error)
+//     throw error
+//   }
+// }
+
 async function getOverviewAnalyticsOptimized(schoolId) {
   const pool = await getPool()
   const startTime = Date.now()
@@ -166,26 +340,24 @@ async function getOverviewAnalyticsOptimized(schoolId) {
       OPTION (MAXDOP 1)
     `)
 
-    // 2. FIXED: Get unique students present today with separate query
+    // 2. FIXED: Get unique students present today (either check-in OR check-out means present)
     const todayPresentResult = await request.query(`
-      WITH TodayFirstCheckins AS (
+      WITH TodayStudentActivity AS (
         SELECT DISTINCT
           a.StudentID,
-          MIN(a.ScanTime) as FirstCheckin,
-          CAST(MIN(a.ScanTime) as TIME) as FirstCheckinTime
+          MIN(CASE WHEN a.Status = 'IN' THEN a.ScanTime END) as FirstCheckinTime
         FROM Attendance a
         INNER JOIN Students st ON a.StudentID = st.StudentID
         INNER JOIN Schools s ON st.SchoolID = s.SchoolID
         WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
-        AND a.Status = 'IN'
         AND st.IsActive = 1
         ${schoolFilter}
         GROUP BY a.StudentID
       )
       SELECT 
         COUNT(*) as TodayPresentStudents,
-        COUNT(CASE WHEN FirstCheckinTime > '08:30:00' THEN 1 END) as TodayLateStudents
-      FROM TodayFirstCheckins
+        COUNT(CASE WHEN CAST(FirstCheckinTime as TIME) > '08:30:00' THEN 1 END) as TodayLateStudents
+      FROM TodayStudentActivity
       OPTION (MAXDOP 1)
     `)
 
