@@ -402,7 +402,255 @@ export default async function handler(req, res) {
   }
 }
 
+// async function handleGet(req, res) {
+//   const startTime = Date.now() // Add performance monitoring
+  
+//   const { 
+//     student_id, 
+//     school_id, 
+//     grade, 
+//     type, 
+//     include_stats, 
+//     search, 
+//     active_only,
+//     limit = 50,        
+//     offset = 0,        
+//     page = 1           
+//   } = req.query
+
+//   // Convert page to offset if needed
+//   const calculatedOffset = offset || ((page - 1) * limit)
+
+//   // Handle grades request (your existing functionality)
+//   if (type === 'grades') {
+//     if (!school_id) {
+//       return res.status(400).json({
+//         success: false,
+//         error: 'School ID is required for grades request'
+//       })
+//     }
+
+//     const pool = await getPool()
+//     const gradesResult = await pool.request()
+//       .input('schoolId', sql.Int, parseInt(school_id))
+//       .query(`
+//         SELECT DISTINCT Grade
+//         FROM Students 
+//         WHERE SchoolID = @schoolId 
+//         AND IsActive = 1 
+//         AND Grade IS NOT NULL
+//         ORDER BY Grade
+//       `)
+
+//     return res.json({
+//       success: true,
+//       grades: gradesResult.recordset.map(row => row.Grade),
+//       timestamp: new Date().toISOString()
+//     })
+//   }
+
+//   // CRITICAL FIX: Remove the expensive subqueries from main query
+//   const pool = await getPool()
+
+//   let query = `
+//     SELECT TOP (@limit)
+//       st.StudentID,
+//       st.Name as StudentName,
+//       st.SchoolID,
+//       s.Name as SchoolName,
+//       st.Grade,
+//       st.StudentCode,
+//       st.ParentPasswordSet,
+//       st.IsActive,
+//       st.CreatedAt,
+//       st.LastLoginAt
+//   `
+  
+//   // REMOVED: The expensive subqueries that were causing timeouts
+//   // These will be handled separately if needed
+  
+//   query += `
+//     FROM Students st
+//     LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
+//   `
+  
+//   const conditions = []
+//   const request = pool.request()
+
+//   // Add the LIMIT parameter
+//   request.input('limit', sql.Int, Math.min(parseInt(limit), 200)) // Max 200
+  
+//   // Build WHERE conditions
+//   if (student_id) {
+//     conditions.push('st.StudentID = @studentId')
+//     request.input('studentId', sql.Int, parseInt(student_id))
+//   }
+  
+//   if (school_id) {
+//     conditions.push('st.SchoolID = @schoolId')
+//     request.input('schoolId', sql.Int, parseInt(school_id))
+//   } else if (!student_id) {
+//     return res.status(400).json({
+//       success: false,
+//       error: 'School ID is required'
+//     })
+//   }
+  
+//   if (search) {
+//     conditions.push('(st.Name LIKE @search OR st.StudentCode LIKE @search)')
+//     request.input('search', sql.NVarChar, `%${search}%`)
+//   }
+  
+//   if (grade) {
+//     conditions.push('st.Grade = @grade')
+//     request.input('grade', sql.NVarChar, grade)
+//   }
+  
+//   if (active_only === 'true') {
+//     conditions.push('st.IsActive = 1')
+//   }
+  
+//   if (conditions.length > 0) {
+//     query += ` WHERE ${conditions.join(' AND ')}`
+//   }
+
+//   // FIXED: Proper SQL Server pagination syntax
+//   query += ` GROUP BY st.StudentID, st.Name, st.SchoolID, s.Name, st.Grade, st.StudentCode, st.ParentPasswordSet, st.IsActive, st.CreatedAt, st.LastLoginAt`
+  
+//   if (calculatedOffset > 0) {
+//     query += ` ORDER BY st.Name OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`
+//     request.input('offset', sql.Int, parseInt(calculatedOffset))
+//   } else {
+//     query += ` ORDER BY st.Name`
+//   }
+  
+//   // FIXED: Execute the query first
+//   const result = await request.query(query)
+  
+//   // FIXED: Map the results correctly
+//   let studentsWithStats = result.recordset.map(student => ({
+//     id: student.StudentID,
+//     student_id: student.StudentID,
+//     name: student.StudentName,
+//     school_id: student.SchoolID,
+//     school_name: student.SchoolName,
+//     grade: student.Grade,
+//     student_code: student.StudentCode,
+//     parent_password_set: student.ParentPasswordSet || false,
+//     is_active: student.IsActive || false,
+//     created_at: student.CreatedAt,
+//     last_login_at: student.LastLoginAt,
+//     last_activity: null, // Will be populated if stats requested
+//     total_attendance_records: 0 // Will be populated if stats requested
+//   }))
+
+//   // OPTIMIZED: Only get stats if explicitly requested AND for reasonable number of students
+//   if (include_stats === 'true' && studentsWithStats.length > 0 && studentsWithStats.length <= 50) {
+//     const studentIds = studentsWithStats.map(s => s.student_id).join(',')
+    
+//     try {
+//       // Single efficient query for all stats
+//       const statsResult = await pool.request().query(`
+//         SELECT 
+//           StudentID,
+//           COUNT(CASE WHEN CAST(ScanTime as DATE) = CAST(GETDATE() as DATE) THEN 1 END) as TodayAttendance,
+//           COUNT(CASE WHEN ScanTime > DATEADD(day, -7, GETDATE()) THEN 1 END) as WeekAttendance,
+//           COUNT(CASE WHEN ScanTime > DATEADD(day, -30, GETDATE()) THEN 1 END) as MonthAttendance,
+//           COUNT(*) as TotalAttendance,
+//           MAX(ScanTime) as LastActivity,
+//           MAX(CreatedAt) as LastAttendance
+//         FROM dbo.Attendance 
+//         WHERE StudentID IN (${studentIds})
+//         GROUP BY StudentID
+//       `)
+      
+//       // Merge stats with student data
+//       const statsMap = new Map()
+//       statsResult.recordset.forEach(stat => {
+//         statsMap.set(stat.StudentID, {
+//           today: stat.TodayAttendance || 0,
+//           week: stat.WeekAttendance || 0,
+//           month: stat.MonthAttendance || 0,
+//           total: stat.TotalAttendance || 0,
+//           last_attendance: stat.LastAttendance,
+//           last_activity: stat.LastActivity
+//         })
+//       })
+      
+//       // Add stats to student objects
+//       studentsWithStats = studentsWithStats.map(student => {
+//         const stats = statsMap.get(student.student_id)
+//         return {
+//           ...student,
+//           last_activity: stats?.last_activity || null,
+//           total_attendance_records: stats?.total || 0,
+//           attendance_stats: stats ? {
+//             today: stats.today,
+//             week: stats.week,
+//             month: stats.month,
+//             total: stats.total,
+//             last_attendance: stats.last_attendance
+//           } : {
+//             today: 0, week: 0, month: 0, total: 0, last_attendance: null
+//           }
+//         }
+//       })
+//     } catch (statsError) {
+//       console.error('Failed to load attendance stats:', statsError.message)
+//       // Continue without stats rather than failing completely
+//     }
+//   } else if (include_stats === 'true' && studentsWithStats.length > 50) {
+//     console.warn(`Skipping stats for ${studentsWithStats.length} students (too many)`)
+//   }
+
+//   // Performance monitoring
+//   const endTime = Date.now()
+//   const responseTime = endTime - startTime
+//   const dataSize = JSON.stringify(studentsWithStats).length
+  
+//   console.log(`Students API Performance:`, {
+//     endpoint: '/api/students',
+//     school_id: school_id,
+//     responseTime: `${responseTime}ms`,
+//     dataSizeKB: Math.round(dataSize / 1024),
+//     recordCount: studentsWithStats.length,
+//     includeStats: include_stats === 'true',
+//     limit: parseInt(limit)
+//   })
+
+//   // Warn about slow queries
+//   if (responseTime > 5000) {
+//     console.warn(`SLOW QUERY WARNING: Students API took ${responseTime}ms`)
+//   }
+
+//   res.json({
+//     success: true,
+//     data: student_id ? studentsWithStats[0] : studentsWithStats,
+//     students: student_id ? undefined : studentsWithStats, // Keep backward compatibility
+//     pagination: {
+//       page: parseInt(page),
+//       limit: parseInt(limit),
+//       offset: calculatedOffset,
+//       has_more: studentsWithStats.length === parseInt(limit), // Rough estimate
+//       total: studentsWithStats.length // Only current page count
+//     },
+//     filters: {
+//       school_id: school_id ? parseInt(school_id) : null,
+//       grade: grade || null,
+//       search: search || null,
+//       active_only: active_only === 'true'
+//     },
+//     count: studentsWithStats.length,
+//     performance: {
+//       query_time_ms: responseTime,
+//       data_size_kb: Math.round(dataSize / 1024)
+//     },
+//     timestamp: new Date().toISOString()
+//   })
+// }
 async function handleGet(req, res) {
+  const startTime = Date.now() // Add performance monitoring
+  
   const { 
     student_id, 
     school_id, 
@@ -410,8 +658,14 @@ async function handleGet(req, res) {
     type, 
     include_stats, 
     search, 
-    active_only 
+    active_only,
+    limit = 50,        
+    offset = 0,        
+    page = 1           
   } = req.query
+
+  // Convert page to offset if needed
+  const calculatedOffset = offset || ((page - 1) * limit)
 
   // Handle grades request (your existing functionality)
   if (type === 'grades') {
@@ -441,11 +695,11 @@ async function handleGet(req, res) {
     })
   }
 
-  // Main students query
+  // CRITICAL FIX: Remove the expensive subqueries from main query
   const pool = await getPool()
 
   let query = `
-    SELECT 
+    SELECT TOP (@limit)
       st.StudentID,
       st.Name as StudentName,
       st.SchoolID,
@@ -455,30 +709,22 @@ async function handleGet(req, res) {
       st.ParentPasswordSet,
       st.IsActive,
       st.CreatedAt,
-      st.LastLoginAt,
-      MAX(a.ScanTime) as LastActivity,
-      COUNT(a.AttendanceID) as TotalAttendanceRecords
+      st.LastLoginAt
   `
   
-  // Add attendance statistics if requested
-  if (include_stats === 'true') {
-    query += `,
-      (SELECT COUNT(*) FROM dbo.Attendance att WHERE att.StudentID = st.StudentID AND CAST(att.CreatedAt as DATE) = CAST(GETDATE() as DATE)) as TodayAttendance,
-      (SELECT COUNT(*) FROM dbo.Attendance att WHERE att.StudentID = st.StudentID AND att.CreatedAt > DATEADD(day, -7, GETDATE())) as WeekAttendance,
-      (SELECT COUNT(*) FROM dbo.Attendance att WHERE att.StudentID = st.StudentID AND att.CreatedAt > DATEADD(day, -30, GETDATE())) as MonthAttendance,
-      (SELECT MAX(att.CreatedAt) FROM dbo.Attendance att WHERE att.StudentID = st.StudentID) as LastAttendance,
-      (SELECT TOP 1 att.Status FROM dbo.Attendance att WHERE att.StudentID = st.StudentID ORDER BY att.CreatedAt DESC) as LastAttendanceStatus
-    `
-  }
+  // REMOVED: The expensive subqueries that were causing timeouts
+  // These will be handled separately if needed
   
   query += `
     FROM Students st
     LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
-    LEFT JOIN dbo.Attendance a ON st.StudentID = a.StudentID
   `
   
   const conditions = []
   const request = pool.request()
+
+  // Add the LIMIT parameter
+  request.input('limit', sql.Int, Math.min(parseInt(limit), 200)) // Max 200
   
   // Build WHERE conditions
   if (student_id) {
@@ -490,7 +736,6 @@ async function handleGet(req, res) {
     conditions.push('st.SchoolID = @schoolId')
     request.input('schoolId', sql.Int, parseInt(school_id))
   } else if (!student_id) {
-    // Require school_id if not requesting specific student
     return res.status(400).json({
       success: false,
       error: 'School ID is required'
@@ -514,16 +759,46 @@ async function handleGet(req, res) {
   if (conditions.length > 0) {
     query += ` WHERE ${conditions.join(' AND ')}`
   }
+
+  // FIXED: Proper SQL Server pagination syntax
+  query += ` GROUP BY st.StudentID, st.Name, st.SchoolID, s.Name, st.Grade, st.StudentCode, st.ParentPasswordSet, st.IsActive, st.CreatedAt, st.LastLoginAt`
   
-  query += ` 
-    GROUP BY st.StudentID, st.Name, st.SchoolID, s.Name, st.Grade, st.StudentCode, 
-             st.ParentPasswordSet, st.IsActive, st.CreatedAt, st.LastLoginAt
-    ORDER BY st.Name, st.Grade
-  `
+  if (calculatedOffset > 0) {
+    query += ` ORDER BY st.Name OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`
+    request.input('offset', sql.Int, parseInt(calculatedOffset))
+  } else {
+    query += ` ORDER BY st.Name`
+  }
   
+  // CRITICAL: Get total counts BEFORE pagination for dashboard stats
+  let totalCounts = { total: 0, active: 0, inactive: 0 }
+  
+  if (!student_id) { // Only get counts when fetching multiple students
+    const countQuery = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN st.IsActive = 1 THEN 1 END) as active,
+        COUNT(CASE WHEN st.IsActive = 0 THEN 1 END) as inactive
+      FROM Students st
+      LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
+      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+    `
+    
+    // Create separate request for counts (reuse same parameters except limit/offset)
+    const countRequest = pool.request()
+    if (school_id) countRequest.input('schoolId', sql.Int, parseInt(school_id))
+    if (search) countRequest.input('search', sql.NVarChar, `%${search}%`)
+    if (grade) countRequest.input('grade', sql.NVarChar, grade)
+    
+    const countResult = await countRequest.query(countQuery)
+    totalCounts = countResult.recordset[0]
+  }
+
+  // FIXED: Execute the paginated query
   const result = await request.query(query)
   
-  const students = result.recordset.map(student => ({
+  // FIXED: Map the results correctly
+  let studentsWithStats = result.recordset.map(student => ({
     id: student.StudentID,
     student_id: student.StudentID,
     name: student.StudentName,
@@ -535,32 +810,125 @@ async function handleGet(req, res) {
     is_active: student.IsActive || false,
     created_at: student.CreatedAt,
     last_login_at: student.LastLoginAt,
-    last_activity: student.LastActivity,
-    total_attendance_records: student.TotalAttendanceRecords || 0,
-    ...(include_stats === 'true' && {
-      attendance_stats: {
-        today: student.TodayAttendance || 0,
-        week: student.WeekAttendance || 0,
-        month: student.MonthAttendance || 0,
-        total: student.TotalAttendanceRecords || 0,
-        last_attendance: student.LastAttendance,
-        last_status: student.LastAttendanceStatus
-      }
-    })
+    last_activity: null, // Will be populated if stats requested
+    total_attendance_records: 0 // Will be populated if stats requested
   }))
+
+  // OPTIMIZED: Only get stats if explicitly requested AND for reasonable number of students
+  if (include_stats === 'true' && studentsWithStats.length > 0 && studentsWithStats.length <= 50) {
+    const studentIds = studentsWithStats.map(s => s.student_id).join(',')
+    
+    try {
+      // Single efficient query for all stats
+      const statsResult = await pool.request().query(`
+        SELECT 
+          StudentID,
+          COUNT(CASE WHEN CAST(ScanTime as DATE) = CAST(GETDATE() as DATE) THEN 1 END) as TodayAttendance,
+          COUNT(CASE WHEN ScanTime > DATEADD(day, -7, GETDATE()) THEN 1 END) as WeekAttendance,
+          COUNT(CASE WHEN ScanTime > DATEADD(day, -30, GETDATE()) THEN 1 END) as MonthAttendance,
+          COUNT(*) as TotalAttendance,
+          MAX(ScanTime) as LastActivity,
+          MAX(CreatedAt) as LastAttendance
+        FROM dbo.Attendance 
+        WHERE StudentID IN (${studentIds})
+        GROUP BY StudentID
+      `)
+      
+      // Merge stats with student data
+      const statsMap = new Map()
+      statsResult.recordset.forEach(stat => {
+        statsMap.set(stat.StudentID, {
+          today: stat.TodayAttendance || 0,
+          week: stat.WeekAttendance || 0,
+          month: stat.MonthAttendance || 0,
+          total: stat.TotalAttendance || 0,
+          last_attendance: stat.LastAttendance,
+          last_activity: stat.LastActivity
+        })
+      })
+      
+      // Add stats to student objects
+      studentsWithStats = studentsWithStats.map(student => {
+        const stats = statsMap.get(student.student_id)
+        return {
+          ...student,
+          last_activity: stats?.last_activity || null,
+          total_attendance_records: stats?.total || 0,
+          attendance_stats: stats ? {
+            today: stats.today,
+            week: stats.week,
+            month: stats.month,
+            total: stats.total,
+            last_attendance: stats.last_attendance
+          } : {
+            today: 0, week: 0, month: 0, total: 0, last_attendance: null
+          }
+        }
+      })
+    } catch (statsError) {
+      console.error('Failed to load attendance stats:', statsError.message)
+      // Continue without stats rather than failing completely
+    }
+  } else if (include_stats === 'true' && studentsWithStats.length > 50) {
+    console.warn(`Skipping stats for ${studentsWithStats.length} students (too many)`)
+  }
+
+  // Performance monitoring
+  const endTime = Date.now()
+  const responseTime = endTime - startTime
+  const dataSize = JSON.stringify(studentsWithStats).length
+  
+  console.log(`Students API Performance:`, {
+    endpoint: '/api/students',
+    school_id: school_id,
+    responseTime: `${responseTime}ms`,
+    dataSizeKB: Math.round(dataSize / 1024),
+    recordCount: studentsWithStats.length,
+    includeStats: include_stats === 'true',
+    limit: parseInt(limit)
+  })
+
+  // Warn about slow queries
+  if (responseTime > 5000) {
+    console.warn(`SLOW QUERY WARNING: Students API took ${responseTime}ms`)
+  }
 
   res.json({
     success: true,
-    data: student_id ? students[0] : students,
-    students: student_id ? undefined : students, // Keep backward compatibility
+    data: student_id ? studentsWithStats[0] : studentsWithStats,
+    students: student_id ? undefined : studentsWithStats, // Keep backward compatibility
+    
+    // FIXED: Include total counts for dashboard statistics
+    totals: {
+      total_students: totalCounts.total || studentsWithStats.length,
+      active_students: totalCounts.active || studentsWithStats.filter(s => s.is_active).length,
+      inactive_students: totalCounts.inactive || studentsWithStats.filter(s => !s.is_active).length
+    },
+    
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      offset: calculatedOffset,
+      has_more: studentsWithStats.length === parseInt(limit),
+      total_records: totalCounts.total || studentsWithStats.length, // Actual total in database
+      current_page_count: studentsWithStats.length // Count on current page
+    },
+    
     filters: {
       school_id: school_id ? parseInt(school_id) : null,
       grade: grade || null,
       search: search || null,
       active_only: active_only === 'true'
     },
-    count: students.length,
-    total: students.length,
+    
+    // DEPRECATED: Keep for backward compatibility
+    count: studentsWithStats.length,
+    total: totalCounts.total || studentsWithStats.length, // For backward compatibility
+    
+    performance: {
+      query_time_ms: responseTime,
+      data_size_kb: Math.round(dataSize / 1024)
+    },
     timestamp: new Date().toISOString()
   })
 }

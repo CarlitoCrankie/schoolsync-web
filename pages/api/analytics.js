@@ -1063,30 +1063,17 @@ async function getOverviewAnalytics(schoolId, companyId) {
 
     // Students present today (improved logic)
     const todayPresentResult = await executeQuery(`
-      WITH TodayAttendance AS (
-        SELECT 
-          a.StudentID,
-          MAX(CASE WHEN a.Status = 'IN' THEN a.ScanTime END) as LastCheckIn,
-          MAX(CASE WHEN a.Status = 'OUT' THEN a.ScanTime END) as LastCheckOut
-        FROM Attendance a
-        INNER JOIN Students st ON a.StudentID = st.StudentID
-        INNER JOIN Schools s ON st.SchoolID = s.SchoolID
-        WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
-        AND st.IsActive = 1
-        ${schoolFilter}
-        GROUP BY a.StudentID
-      ),
-      PresentStudents AS (
-        SELECT StudentID
-        FROM TodayAttendance
-        WHERE LastCheckIn IS NOT NULL 
-        AND (LastCheckOut IS NULL OR LastCheckIn > LastCheckOut)
-      )
-      SELECT COUNT(*) as TodayPresentStudents
-      FROM PresentStudents
+      SELECT COUNT(DISTINCT a.StudentID) as TodayPresentStudents
+      FROM Attendance a WITH (NOLOCK)
+      INNER JOIN Students st ON a.StudentID = st.StudentID
+      INNER JOIN Schools s ON st.SchoolID = s.SchoolID
+      WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
+      AND a.Status = 'IN'
+      AND st.IsActive = 1
+      ${schoolFilter}
       OPTION (MAXDOP 1)
     `, params, 30000);
-
+    
     // Attendance record counts
     const attendanceCountsResult = await executeQuery(`
       SELECT 

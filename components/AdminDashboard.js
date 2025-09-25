@@ -217,6 +217,256 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   }
 
+  // const loadSchoolAdminData = async () => {
+  //   console.log('=== LOADING SCHOOL ADMIN DATA ===')
+    
+  //   try {
+  //     const schoolId = user?.SchoolID || user?.school_id
+      
+  //     if (!schoolId) {
+  //       console.error('No school ID found for school admin')
+  //       throw new Error('School ID not found in user data')
+  //     }
+
+  //     console.log('Using school ID:', schoolId)
+
+  //     const apiCalls = []
+
+  //     // Overview/stats API call
+  //     apiCalls.push(
+  //       fetch(`/api/analytics?type=overview&school_id=${schoolId}`)
+  //         .then(response => {
+  //           console.log('Overview API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Overview API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Overview API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //     // Students API call
+  //     apiCalls.push(
+  //       fetch(`/api/students?school_id=${schoolId}&include_stats=true`)
+  //         .then(response => {
+  //           console.log('Students API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Students API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Students API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //     // Attendance API call
+  //     apiCalls.push(
+  //       fetch(`/api/analytics?type=real-time&school_id=${schoolId}`)
+  //         .then(response => {
+  //           console.log('Attendance API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Attendance API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Attendance API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //   // Sync status API call - check school-specific sync agent
+  //   apiCalls.push(
+  //   fetch('/api/sync-agent', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ 
+  //       action: 'get_status', 
+  //       school_id: schoolId 
+  //       })
+  //   })
+  //       .then(response => {
+  //       console.log('Sync API response status:', response.status)
+  //       if (!response.ok) {
+  //           throw new Error(`Sync API failed: ${response.status}`)
+  //       }
+  //       return response.json()
+  //       })
+  //       .catch(error => {
+  //       console.warn('Sync API failed:', error)
+  //       return { success: false, error: error.message }
+  //       })
+  //   )
+
+  //   // Also try to get sync performance data for this school
+  //   apiCalls.push(
+  //   fetch(`/api/analytics?type=sync-performance&school_id=${schoolId}`)
+  //       .then(response => {
+  //       console.log('Sync Performance API response status:', response.status)
+  //       if (!response.ok) {
+  //           throw new Error(`Sync Performance API failed: ${response.status}`)
+  //       }
+  //       return response.json()
+  //       })
+  //       .catch(error => {
+  //       console.warn('Sync Performance API failed:', error)
+  //       return { success: false, error: error.message }
+  //       })
+  //   )
+
+  //     console.log('Making parallel API calls...')
+  //     const [overviewData, studentsData, attendanceData, syncStatus, syncPerformance] = await Promise.all(apiCalls)
+
+  //     console.log('=== API RESPONSES ===')
+  //     console.log('Overview:', overviewData)
+  //     console.log('Students:', studentsData)
+  //     console.log('Attendance:', attendanceData)
+  //     console.log('Sync Status:', syncStatus)
+  //     console.log('=== END API RESPONSES ===')
+
+  //       // FIXED: Better sync agent status detection for school admin
+  //   let syncAgentStatus = 'offline'
+
+  //   // Method 1: Check sync status response
+  //   if (syncStatus?.success) {
+  //   if (syncStatus.school_id && syncStatus.school_id == schoolId) {
+  //       syncAgentStatus = syncStatus.status || 'online'
+  //       console.log('Sync status from get_status:', syncAgentStatus)
+  //   } else if (syncStatus.result && syncStatus.result.school_id == schoolId) {
+  //       syncAgentStatus = 'online'
+  //       console.log('Sync status from ping result:', syncAgentStatus)
+  //   }
+  //   }
+
+  //   // Method 2: Check sync performance data
+  //   if (syncAgentStatus === 'offline' && syncPerformance?.success && syncPerformance.agents) {
+  //   const schoolAgent = syncPerformance.agents.find(agent => agent.school_id == schoolId)
+  //   if (schoolAgent) {
+  //       syncAgentStatus = schoolAgent.connection_status === 'Online' ? 'online' : 'offline'
+  //       console.log('Sync status from performance data:', syncAgentStatus)
+  //   }
+  //   }
+
+  //   // Method 3: Check if sync agent database tables exist and have recent data
+  //   if (syncAgentStatus === 'offline') {
+  //   // Try to ping the sync agent directly for this school
+  //   try {
+  //       const pingResponse = await fetch('/api/sync-agent', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ 
+  //           action: 'ping_agent', 
+  //           school_id: schoolId 
+  //       })
+  //       })
+  //       const pingData = await pingResponse.json()
+  //       if (pingData.success && pingData.result?.status === 'online') {
+  //       syncAgentStatus = 'online'
+  //       console.log('Sync status from ping:', syncAgentStatus)
+  //       }
+  //   } catch (error) {
+  //       console.warn('Sync agent ping failed:', error)
+  //   }
+  //   }
+
+  //   console.log('Final sync agent status determined as:', syncAgentStatus)
+  //     console.log('Sync agent status determined as:', syncAgentStatus)
+
+  //     let totalStudents = 0
+  //     let presentToday = 0
+  //     let withoutPasswords = 0
+
+  //     // Process students data
+  //     if (studentsData?.success && Array.isArray(studentsData.data)) {
+  //       console.log('Processing students data - count:', studentsData.data.length)
+  //       totalStudents = studentsData.data.length
+  //       withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+
+  //       setStudents(studentsData.data.map(student => ({
+  //         id: student.student_id,
+  //         name: student.name,
+  //         grade: student.grade,
+  //         studentCode: student.student_code,
+  //         student_code: student.student_code,
+  //         parentPasswordSet: student.parent_password_set,
+  //         parent_password_set: student.parent_password_set,
+  //         lastSeen: student.attendance_stats?.last_attendance,
+  //         is_active: student.is_active !== false
+  //       })))
+  //     } else {
+  //       console.log('Using fallback student data')
+  //       const fallbackStudents = [
+  //         { id: 1, name: 'John Doe', grade: '10th', studentCode: '001', parentPasswordSet: true, lastSeen: '2024-12-19T08:15:00', is_active: true },
+  //         { id: 2, name: 'Jane Smith', grade: '9th', studentCode: '002', parentPasswordSet: false, lastSeen: null, is_active: true },
+  //       ]
+  //       setStudents(fallbackStudents)
+  //       totalStudents = fallbackStudents.length
+  //       withoutPasswords = fallbackStudents.filter(s => !s.parentPasswordSet).length
+  //     }
+
+  //     // Process attendance data
+  //     if (attendanceData?.success && Array.isArray(attendanceData.current_activity)) {
+  //       console.log('Processing attendance data - total records:', attendanceData.current_activity.length)
+        
+  //       // FIXED: Use the corrected attendance.today value from API
+  //       const todayPresentFromAPI = overviewData?.overview?.attendance?.today || 0
+        
+  //       console.log('Today present from API:', todayPresentFromAPI)
+  //       console.log('Debug info from API:', overviewData?.debug_info)
+        
+  //       // Use the API value instead of calculating from activity records
+  //       presentToday = todayPresentFromAPI
+        
+  //       const recentCheckIns = attendanceData.current_activity
+  //         .sort((a, b) => new Date(b.scan_time || b.created_at) - new Date(a.scan_time || a.created_at))
+  //         .slice(0, 10)
+
+  //       setAttendance(recentCheckIns.map(record => ({
+  //         id: record.attendance_id,
+  //         studentName: record.student_name,
+  //         status: record.status,
+  //         time: record.scan_time,
+  //         grade: 'N/A'
+  //       })))
+  //     } else {
+  //       console.log('No valid attendance data received')
+  //       setAttendance([])
+  //     }
+
+  //     const calculatedStats = {
+  //       total_students: totalStudents,
+  //       present_today: presentToday, // This should already be unique from your backend
+  //       absent_today: Math.max(0, totalStudents - presentToday),
+  //       students_without_passwords: withoutPasswords,
+  //       sync_status: syncAgentStatus,
+  //       attendance_rate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0
+  //     }
+
+  //     console.log('Setting calculated stats:', calculatedStats)
+  //     setStats(calculatedStats)
+
+  //     console.log('=== SCHOOL ADMIN DATA LOADING COMPLETE ===')
+
+  //   } catch (error) {
+  //     console.error('Error in loadSchoolAdminData:', error)
+  //     setError('Some data could not be loaded: ' + error.message)
+      
+  //     setStats({
+  //       total_students: 0,
+  //       present_today: 0,
+  //       absent_today: 0,
+  //       students_without_passwords: 0,
+  //       sync_status: 'offline'
+  //     })
+  //     setStudents([])
+  //     setAttendance([])
+  //   }
+  // }
   const loadSchoolAdminData = async () => {
     console.log('=== LOADING SCHOOL ADMIN DATA ===')
     
@@ -248,9 +498,9 @@ export default function AdminDashboard({ user, onLogout }) {
           })
       )
 
-      // Students API call
+      // FIXED: Students API call - Remove limit to get all students for stats, or use high limit
       apiCalls.push(
-        fetch(`/api/students?school_id=${schoolId}&include_stats=true`)
+        fetch(`/api/students?school_id=${schoolId}&include_stats=true&limit=999999`)
           .then(response => {
             console.log('Students API response status:', response.status)
             if (!response.ok) {
@@ -280,44 +530,44 @@ export default function AdminDashboard({ user, onLogout }) {
           })
       )
 
-    // Sync status API call - check school-specific sync agent
-    apiCalls.push(
-    fetch('/api/sync-agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-        action: 'get_status', 
-        school_id: schoolId 
+      // Sync status API call - check school-specific sync agent
+      apiCalls.push(
+        fetch('/api/sync-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: 'get_status', 
+            school_id: schoolId 
+          })
         })
-    })
         .then(response => {
-        console.log('Sync API response status:', response.status)
-        if (!response.ok) {
+          console.log('Sync API response status:', response.status)
+          if (!response.ok) {
             throw new Error(`Sync API failed: ${response.status}`)
-        }
-        return response.json()
+          }
+          return response.json()
         })
         .catch(error => {
-        console.warn('Sync API failed:', error)
-        return { success: false, error: error.message }
+          console.warn('Sync API failed:', error)
+          return { success: false, error: error.message }
         })
-    )
+      )
 
-    // Also try to get sync performance data for this school
-    apiCalls.push(
-    fetch(`/api/analytics?type=sync-performance&school_id=${schoolId}`)
-        .then(response => {
-        console.log('Sync Performance API response status:', response.status)
-        if (!response.ok) {
-            throw new Error(`Sync Performance API failed: ${response.status}`)
-        }
-        return response.json()
-        })
-        .catch(error => {
-        console.warn('Sync Performance API failed:', error)
-        return { success: false, error: error.message }
-        })
-    )
+      // Also try to get sync performance data for this school
+      apiCalls.push(
+        fetch(`/api/analytics?type=sync-performance&school_id=${schoolId}`)
+          .then(response => {
+            console.log('Sync Performance API response status:', response.status)
+            if (!response.ok) {
+              throw new Error(`Sync Performance API failed: ${response.status}`)
+            }
+            return response.json()
+          })
+          .catch(error => {
+            console.warn('Sync Performance API failed:', error)
+            return { success: false, error: error.message }
+          })
+      )
 
       console.log('Making parallel API calls...')
       const [overviewData, studentsData, attendanceData, syncStatus, syncPerformance] = await Promise.all(apiCalls)
@@ -329,75 +579,119 @@ export default function AdminDashboard({ user, onLogout }) {
       console.log('Sync Status:', syncStatus)
       console.log('=== END API RESPONSES ===')
 
-        // FIXED: Better sync agent status detection for school admin
-    let syncAgentStatus = 'offline'
+      // FIXED: Better sync agent status detection for school admin
+      let syncAgentStatus = 'offline'
 
-    // Method 1: Check sync status response
-    if (syncStatus?.success) {
-    if (syncStatus.school_id && syncStatus.school_id == schoolId) {
-        syncAgentStatus = syncStatus.status || 'online'
-        console.log('Sync status from get_status:', syncAgentStatus)
-    } else if (syncStatus.result && syncStatus.result.school_id == schoolId) {
-        syncAgentStatus = 'online'
-        console.log('Sync status from ping result:', syncAgentStatus)
-    }
-    }
-
-    // Method 2: Check sync performance data
-    if (syncAgentStatus === 'offline' && syncPerformance?.success && syncPerformance.agents) {
-    const schoolAgent = syncPerformance.agents.find(agent => agent.school_id == schoolId)
-    if (schoolAgent) {
-        syncAgentStatus = schoolAgent.connection_status === 'Online' ? 'online' : 'offline'
-        console.log('Sync status from performance data:', syncAgentStatus)
-    }
-    }
-
-    // Method 3: Check if sync agent database tables exist and have recent data
-    if (syncAgentStatus === 'offline') {
-    // Try to ping the sync agent directly for this school
-    try {
-        const pingResponse = await fetch('/api/sync-agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            action: 'ping_agent', 
-            school_id: schoolId 
-        })
-        })
-        const pingData = await pingResponse.json()
-        if (pingData.success && pingData.result?.status === 'online') {
-        syncAgentStatus = 'online'
-        console.log('Sync status from ping:', syncAgentStatus)
+      // Method 1: Check sync status response
+      if (syncStatus?.success) {
+        if (syncStatus.school_id && syncStatus.school_id == schoolId) {
+          syncAgentStatus = syncStatus.status || 'online'
+          console.log('Sync status from get_status:', syncAgentStatus)
+        } else if (syncStatus.result && syncStatus.result.school_id == schoolId) {
+          syncAgentStatus = 'online'
+          console.log('Sync status from ping result:', syncAgentStatus)
         }
-    } catch (error) {
-        console.warn('Sync agent ping failed:', error)
-    }
-    }
+      }
 
-    console.log('Final sync agent status determined as:', syncAgentStatus)
-      console.log('Sync agent status determined as:', syncAgentStatus)
+      // Method 2: Check sync performance data
+      if (syncAgentStatus === 'offline' && syncPerformance?.success && syncPerformance.agents) {
+        const schoolAgent = syncPerformance.agents.find(agent => agent.school_id == schoolId)
+        if (schoolAgent) {
+          syncAgentStatus = schoolAgent.connection_status === 'Online' ? 'online' : 'offline'
+          console.log('Sync status from performance data:', syncAgentStatus)
+        }
+      }
+
+      // Method 3: Check if sync agent database tables exist and have recent data
+      if (syncAgentStatus === 'offline') {
+        // Try to ping the sync agent directly for this school
+        try {
+          const pingResponse = await fetch('/api/sync-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              action: 'ping_agent', 
+              school_id: schoolId 
+            })
+          })
+          const pingData = await pingResponse.json()
+          if (pingData.success && pingData.result?.status === 'online') {
+            syncAgentStatus = 'online'
+            console.log('Sync status from ping:', syncAgentStatus)
+          }
+        } catch (error) {
+          console.warn('Sync agent ping failed:', error)
+        }
+      }
+
+      console.log('Final sync agent status determined as:', syncAgentStatus)
 
       let totalStudents = 0
       let presentToday = 0
       let withoutPasswords = 0
 
-      // Process students data
-      if (studentsData?.success && Array.isArray(studentsData.data)) {
-        console.log('Processing students data - count:', studentsData.data.length)
-        totalStudents = studentsData.data.length
-        withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+      // FIXED: Process students data with proper total counts
+      if (studentsData?.success) {
+        console.log('Processing students data...')
+        
+        // PRIORITY 1: Use the new totals object if available (from updated API)
+        if (studentsData.totals) {
+          console.log('Using totals from API:', studentsData.totals)
+          totalStudents = studentsData.totals.total_students
+          
+          // Process the paginated student data
+          if (Array.isArray(studentsData.data)) {
+            withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+            
+            setStudents(studentsData.data.map(student => ({
+              id: student.student_id,
+              name: student.name,
+              grade: student.grade,
+              studentCode: student.student_code,
+              student_code: student.student_code,
+              parentPasswordSet: student.parent_password_set,
+              parent_password_set: student.parent_password_set,
+              lastSeen: student.attendance_stats?.last_attendance,
+              is_active: student.is_active !== false
+            })))
+          }
+        }
+        // FALLBACK: Use the old method if totals not available
+        else if (Array.isArray(studentsData.data)) {
+          console.log('Using legacy method - students count:', studentsData.data.length)
+          totalStudents = studentsData.data.length
+          withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
 
-        setStudents(studentsData.data.map(student => ({
-          id: student.student_id,
-          name: student.name,
-          grade: student.grade,
-          studentCode: student.student_code,
-          student_code: student.student_code,
-          parentPasswordSet: student.parent_password_set,
-          parent_password_set: student.parent_password_set,
-          lastSeen: student.attendance_stats?.last_attendance,
-          is_active: student.is_active !== false
-        })))
+          setStudents(studentsData.data.map(student => ({
+            id: student.student_id,
+            name: student.name,
+            grade: student.grade,
+            studentCode: student.student_code,
+            student_code: student.student_code,
+            parentPasswordSet: student.parent_password_set,
+            parent_password_set: student.parent_password_set,
+            lastSeen: student.attendance_stats?.last_attendance,
+            is_active: student.is_active !== false
+          })))
+        }
+        // COMPATIBILITY: Handle old API format
+        else if (Array.isArray(studentsData.students)) {
+          console.log('Using students array - count:', studentsData.students.length)
+          totalStudents = studentsData.total || studentsData.students.length
+          withoutPasswords = studentsData.students.filter(s => !s.parent_password_set).length
+
+          setStudents(studentsData.students.map(student => ({
+            id: student.student_id,
+            name: student.name,
+            grade: student.grade,
+            studentCode: student.student_code,
+            student_code: student.student_code,
+            parentPasswordSet: student.parent_password_set,
+            parent_password_set: student.parent_password_set,
+            lastSeen: student.attendance_stats?.last_attendance,
+            is_active: student.is_active !== false
+          })))
+        }
       } else {
         console.log('Using fallback student data')
         const fallbackStudents = [
@@ -440,7 +734,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
       const calculatedStats = {
         total_students: totalStudents,
-        present_today: presentToday, // This should already be unique from your backend
+        present_today: presentToday, 
         absent_today: Math.max(0, totalStudents - presentToday),
         students_without_passwords: withoutPasswords,
         sync_status: syncAgentStatus,
@@ -466,7 +760,7 @@ export default function AdminDashboard({ user, onLogout }) {
       setStudents([])
       setAttendance([])
     }
-  }
+}
 
   const determineSystemHealth = (overview, syncData) => {
     let totalAgents = 0
