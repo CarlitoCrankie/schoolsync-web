@@ -8,13 +8,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:health": "node -r dotenv/config scripts/database-maintenance.js health",
+    "db:cleanup": "node -r dotenv/config scripts/database-maintenance.js cleanup",
+    "db:performance": "node -r dotenv/config scripts/database-maintenance.js performance",
+    "db:disk": "node -r dotenv/config scripts/database-maintenance.js disk",
+    "db:maintenance": "node -r dotenv/config scripts/database-maintenance.js full",
+    "db:monitor": "watch -n 30 'npm run db:health'"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "csv-parser": "^3.2.0",
-    "dotenv": "^17.2.2",
+    "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "formidable": "^3.5.4",
     "jsonwebtoken": "^9.0.2",
