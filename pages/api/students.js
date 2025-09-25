@@ -402,6 +402,7 @@ export default async function handler(req, res) {
   }
 }
 
+
 // async function handleGet(req, res) {
 //   const startTime = Date.now() // Add performance monitoring
   
@@ -524,7 +525,31 @@ export default async function handler(req, res) {
 //     query += ` ORDER BY st.Name`
 //   }
   
-//   // FIXED: Execute the query first
+//   // CRITICAL: Get total counts BEFORE pagination for dashboard stats
+//   let totalCounts = { total: 0, active: 0, inactive: 0 }
+  
+//   if (!student_id) { // Only get counts when fetching multiple students
+//     const countQuery = `
+//       SELECT 
+//         COUNT(*) as total,
+//         COUNT(CASE WHEN st.IsActive = 1 THEN 1 END) as active,
+//         COUNT(CASE WHEN st.IsActive = 0 THEN 1 END) as inactive
+//       FROM Students st
+//       LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
+//       ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+//     `
+    
+//     // Create separate request for counts (reuse same parameters except limit/offset)
+//     const countRequest = pool.request()
+//     if (school_id) countRequest.input('schoolId', sql.Int, parseInt(school_id))
+//     if (search) countRequest.input('search', sql.NVarChar, `%${search}%`)
+//     if (grade) countRequest.input('grade', sql.NVarChar, grade)
+    
+//     const countResult = await countRequest.query(countQuery)
+//     totalCounts = countResult.recordset[0]
+//   }
+
+//   // FIXED: Execute the paginated query
 //   const result = await request.query(query)
   
 //   // FIXED: Map the results correctly
@@ -627,20 +652,34 @@ export default async function handler(req, res) {
 //     success: true,
 //     data: student_id ? studentsWithStats[0] : studentsWithStats,
 //     students: student_id ? undefined : studentsWithStats, // Keep backward compatibility
+    
+//     // FIXED: Include total counts for dashboard statistics
+//     totals: {
+//       total_students: totalCounts.total || studentsWithStats.length,
+//       active_students: totalCounts.active || studentsWithStats.filter(s => s.is_active).length,
+//       inactive_students: totalCounts.inactive || studentsWithStats.filter(s => !s.is_active).length
+//     },
+    
 //     pagination: {
 //       page: parseInt(page),
 //       limit: parseInt(limit),
 //       offset: calculatedOffset,
-//       has_more: studentsWithStats.length === parseInt(limit), // Rough estimate
-//       total: studentsWithStats.length // Only current page count
+//       has_more: studentsWithStats.length === parseInt(limit),
+//       total_records: totalCounts.total || studentsWithStats.length, // Actual total in database
+//       current_page_count: studentsWithStats.length // Count on current page
 //     },
+    
 //     filters: {
 //       school_id: school_id ? parseInt(school_id) : null,
 //       grade: grade || null,
 //       search: search || null,
 //       active_only: active_only === 'true'
 //     },
+    
+//     // DEPRECATED: Keep for backward compatibility
 //     count: studentsWithStats.length,
+//     total: totalCounts.total || studentsWithStats.length, // For backward compatibility
+    
 //     performance: {
 //       query_time_ms: responseTime,
 //       data_size_kb: Math.round(dataSize / 1024)
@@ -649,7 +688,7 @@ export default async function handler(req, res) {
 //   })
 // }
 async function handleGet(req, res) {
-  const startTime = Date.now() // Add performance monitoring
+  const startTime = Date.now()
   
   const { 
     student_id, 
@@ -667,7 +706,7 @@ async function handleGet(req, res) {
   // Convert page to offset if needed
   const calculatedOffset = offset || ((page - 1) * limit)
 
-  // Handle grades request (your existing functionality)
+  // Handle grades request
   if (type === 'grades') {
     if (!school_id) {
       return res.status(400).json({
@@ -695,11 +734,81 @@ async function handleGet(req, res) {
     })
   }
 
-  // CRITICAL FIX: Remove the expensive subqueries from main query
   const pool = await getPool()
 
+  // Build WHERE conditions first (used for both count and data queries)
+  const conditions = []
+  const baseParams = {}
+
+  if (student_id) {
+    conditions.push('st.StudentID = @studentId')
+    baseParams.studentId = parseInt(student_id)
+  }
+  
+  if (school_id) {
+    conditions.push('st.SchoolID = @schoolId')
+    baseParams.schoolId = parseInt(school_id)
+  } else if (!student_id) {
+    return res.status(400).json({
+      success: false,
+      error: 'School ID is required'
+    })
+  }
+  
+  // CRITICAL: Apply search filter to COUNT query too
+  if (search) {
+    conditions.push('(st.Name LIKE @search OR st.StudentCode LIKE @search)')
+    baseParams.search = `%${search}%`
+  }
+  
+  if (grade) {
+    conditions.push('st.Grade = @grade')
+    baseParams.grade = grade
+  }
+  
+  if (active_only === 'true') {
+    conditions.push('st.IsActive = 1')
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  // STEP 1: Get total counts (with same filters as main query)
+  let totalCounts = { total: 0, active: 0, inactive: 0, filtered_total: 0 }
+  
+  if (!student_id) { // Only get counts when fetching multiple students
+    const countQuery = `
+      SELECT 
+        COUNT(*) as filtered_total,
+        COUNT(CASE WHEN st.IsActive = 1 THEN 1 END) as active,
+        COUNT(CASE WHEN st.IsActive = 0 THEN 1 END) as inactive,
+        -- Also get unfiltered total for dashboard
+        (SELECT COUNT(*) FROM Students WHERE SchoolID = @schoolId) as total
+      FROM Students st
+      LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
+      ${whereClause}
+    `
+    
+    // Create request for counts
+    const countRequest = pool.request()
+    Object.keys(baseParams).forEach(key => {
+      if (key === 'studentId') countRequest.input(key, sql.Int, baseParams[key])
+      else if (key === 'schoolId') countRequest.input(key, sql.Int, baseParams[key])
+      else countRequest.input(key, sql.NVarChar, baseParams[key])
+    })
+    
+    const countResult = await countRequest.query(countQuery)
+    totalCounts = countResult.recordset[0]
+  }
+
+  // STEP 2: Handle special cases for limit
+  let actualLimit = parseInt(limit)
+  if (limit === 'all' || limit === '999999') {
+    actualLimit = Math.max(totalCounts.filtered_total || 1000, 1000) // Use filtered count or fallback to 1000
+  }
+
+  // STEP 3: Build main query with optimized structure
   let query = `
-    SELECT TOP (@limit)
+    SELECT 
       st.StudentID,
       st.Name as StudentName,
       st.SchoolID,
@@ -710,94 +819,43 @@ async function handleGet(req, res) {
       st.IsActive,
       st.CreatedAt,
       st.LastLoginAt
-  `
-  
-  // REMOVED: The expensive subqueries that were causing timeouts
-  // These will be handled separately if needed
-  
-  query += `
     FROM Students st
     LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
+    ${whereClause}
+    ORDER BY st.Name
   `
+
+  // Add pagination for SQL Server
+  if (actualLimit < 999999) {
+    if (calculatedOffset > 0) {
+      query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`
+    } else {
+      query = query.replace('SELECT', `SELECT TOP (@limit)`)
+    }
+  }
   
-  const conditions = []
+  // STEP 4: Execute main query
   const request = pool.request()
-
-  // Add the LIMIT parameter
-  request.input('limit', sql.Int, Math.min(parseInt(limit), 200)) // Max 200
   
-  // Build WHERE conditions
-  if (student_id) {
-    conditions.push('st.StudentID = @studentId')
-    request.input('studentId', sql.Int, parseInt(student_id))
+  // Add all parameters
+  Object.keys(baseParams).forEach(key => {
+    if (key === 'studentId' || key === 'schoolId') {
+      request.input(key, sql.Int, baseParams[key])
+    } else {
+      request.input(key, sql.NVarChar, baseParams[key])
+    }
+  })
+  
+  if (actualLimit < 999999) {
+    request.input('limit', sql.Int, actualLimit)
+    if (calculatedOffset > 0) {
+      request.input('offset', sql.Int, parseInt(calculatedOffset))
+    }
   }
   
-  if (school_id) {
-    conditions.push('st.SchoolID = @schoolId')
-    request.input('schoolId', sql.Int, parseInt(school_id))
-  } else if (!student_id) {
-    return res.status(400).json({
-      success: false,
-      error: 'School ID is required'
-    })
-  }
-  
-  if (search) {
-    conditions.push('(st.Name LIKE @search OR st.StudentCode LIKE @search)')
-    request.input('search', sql.NVarChar, `%${search}%`)
-  }
-  
-  if (grade) {
-    conditions.push('st.Grade = @grade')
-    request.input('grade', sql.NVarChar, grade)
-  }
-  
-  if (active_only === 'true') {
-    conditions.push('st.IsActive = 1')
-  }
-  
-  if (conditions.length > 0) {
-    query += ` WHERE ${conditions.join(' AND ')}`
-  }
-
-  // FIXED: Proper SQL Server pagination syntax
-  query += ` GROUP BY st.StudentID, st.Name, st.SchoolID, s.Name, st.Grade, st.StudentCode, st.ParentPasswordSet, st.IsActive, st.CreatedAt, st.LastLoginAt`
-  
-  if (calculatedOffset > 0) {
-    query += ` ORDER BY st.Name OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`
-    request.input('offset', sql.Int, parseInt(calculatedOffset))
-  } else {
-    query += ` ORDER BY st.Name`
-  }
-  
-  // CRITICAL: Get total counts BEFORE pagination for dashboard stats
-  let totalCounts = { total: 0, active: 0, inactive: 0 }
-  
-  if (!student_id) { // Only get counts when fetching multiple students
-    const countQuery = `
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN st.IsActive = 1 THEN 1 END) as active,
-        COUNT(CASE WHEN st.IsActive = 0 THEN 1 END) as inactive
-      FROM Students st
-      LEFT JOIN Schools s ON st.SchoolID = s.SchoolID
-      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
-    `
-    
-    // Create separate request for counts (reuse same parameters except limit/offset)
-    const countRequest = pool.request()
-    if (school_id) countRequest.input('schoolId', sql.Int, parseInt(school_id))
-    if (search) countRequest.input('search', sql.NVarChar, `%${search}%`)
-    if (grade) countRequest.input('grade', sql.NVarChar, grade)
-    
-    const countResult = await countRequest.query(countQuery)
-    totalCounts = countResult.recordset[0]
-  }
-
-  // FIXED: Execute the paginated query
   const result = await request.query(query)
   
-  // FIXED: Map the results correctly
+  // STEP 5: Map results
   let studentsWithStats = result.recordset.map(student => ({
     id: student.StudentID,
     student_id: student.StudentID,
@@ -810,67 +868,66 @@ async function handleGet(req, res) {
     is_active: student.IsActive || false,
     created_at: student.CreatedAt,
     last_login_at: student.LastLoginAt,
-    last_activity: null, // Will be populated if stats requested
-    total_attendance_records: 0 // Will be populated if stats requested
+    last_activity: null,
+    total_attendance_records: 0
   }))
 
-  // OPTIMIZED: Only get stats if explicitly requested AND for reasonable number of students
-  if (include_stats === 'true' && studentsWithStats.length > 0 && studentsWithStats.length <= 50) {
+  // STEP 6: Add stats if requested (only for reasonable numbers)
+  if (include_stats === 'true' && studentsWithStats.length > 0 && studentsWithStats.length <= 100) {
     const studentIds = studentsWithStats.map(s => s.student_id).join(',')
     
-    try {
-      // Single efficient query for all stats
-      const statsResult = await pool.request().query(`
-        SELECT 
-          StudentID,
-          COUNT(CASE WHEN CAST(ScanTime as DATE) = CAST(GETDATE() as DATE) THEN 1 END) as TodayAttendance,
-          COUNT(CASE WHEN ScanTime > DATEADD(day, -7, GETDATE()) THEN 1 END) as WeekAttendance,
-          COUNT(CASE WHEN ScanTime > DATEADD(day, -30, GETDATE()) THEN 1 END) as MonthAttendance,
-          COUNT(*) as TotalAttendance,
-          MAX(ScanTime) as LastActivity,
-          MAX(CreatedAt) as LastAttendance
-        FROM dbo.Attendance 
-        WHERE StudentID IN (${studentIds})
-        GROUP BY StudentID
-      `)
-      
-      // Merge stats with student data
-      const statsMap = new Map()
-      statsResult.recordset.forEach(stat => {
-        statsMap.set(stat.StudentID, {
-          today: stat.TodayAttendance || 0,
-          week: stat.WeekAttendance || 0,
-          month: stat.MonthAttendance || 0,
-          total: stat.TotalAttendance || 0,
-          last_attendance: stat.LastAttendance,
-          last_activity: stat.LastActivity
+    if (studentIds) {
+      try {
+        const statsResult = await pool.request().query(`
+          SELECT 
+            StudentID,
+            COUNT(CASE WHEN CAST(ScanTime as DATE) = CAST(GETDATE() as DATE) THEN 1 END) as TodayAttendance,
+            COUNT(CASE WHEN ScanTime > DATEADD(day, -7, GETDATE()) THEN 1 END) as WeekAttendance,
+            COUNT(CASE WHEN ScanTime > DATEADD(day, -30, GETDATE()) THEN 1 END) as MonthAttendance,
+            COUNT(*) as TotalAttendance,
+            MAX(ScanTime) as LastActivity,
+            MAX(CreatedAt) as LastAttendance
+          FROM dbo.Attendance 
+          WHERE StudentID IN (${studentIds})
+          GROUP BY StudentID
+        `)
+        
+        // Merge stats with student data
+        const statsMap = new Map()
+        statsResult.recordset.forEach(stat => {
+          statsMap.set(stat.StudentID, {
+            today: stat.TodayAttendance || 0,
+            week: stat.WeekAttendance || 0,
+            month: stat.MonthAttendance || 0,
+            total: stat.TotalAttendance || 0,
+            last_attendance: stat.LastAttendance,
+            last_activity: stat.LastActivity
+          })
         })
-      })
-      
-      // Add stats to student objects
-      studentsWithStats = studentsWithStats.map(student => {
-        const stats = statsMap.get(student.student_id)
-        return {
-          ...student,
-          last_activity: stats?.last_activity || null,
-          total_attendance_records: stats?.total || 0,
-          attendance_stats: stats ? {
-            today: stats.today,
-            week: stats.week,
-            month: stats.month,
-            total: stats.total,
-            last_attendance: stats.last_attendance
-          } : {
-            today: 0, week: 0, month: 0, total: 0, last_attendance: null
+        
+        studentsWithStats = studentsWithStats.map(student => {
+          const stats = statsMap.get(student.student_id)
+          return {
+            ...student,
+            last_activity: stats?.last_activity || null,
+            total_attendance_records: stats?.total || 0,
+            attendance_stats: stats ? {
+              today: stats.today,
+              week: stats.week,
+              month: stats.month,
+              total: stats.total,
+              last_attendance: stats.last_attendance
+            } : {
+              today: 0, week: 0, month: 0, total: 0, last_attendance: null
+            }
           }
-        }
-      })
-    } catch (statsError) {
-      console.error('Failed to load attendance stats:', statsError.message)
-      // Continue without stats rather than failing completely
+        })
+      } catch (statsError) {
+        console.error('Failed to load attendance stats:', statsError.message)
+      }
     }
-  } else if (include_stats === 'true' && studentsWithStats.length > 50) {
-    console.warn(`Skipping stats for ${studentsWithStats.length} students (too many)`)
+  } else if (include_stats === 'true' && studentsWithStats.length > 100) {
+    console.warn(`Skipping stats for ${studentsWithStats.length} students (too many for performance)`)
   }
 
   // Performance monitoring
@@ -884,8 +941,11 @@ async function handleGet(req, res) {
     responseTime: `${responseTime}ms`,
     dataSizeKB: Math.round(dataSize / 1024),
     recordCount: studentsWithStats.length,
+    totalInDB: totalCounts.total || 'unknown',
+    filteredTotal: totalCounts.filtered_total || studentsWithStats.length,
     includeStats: include_stats === 'true',
-    limit: parseInt(limit)
+    limit: actualLimit,
+    search: search || 'none'
   })
 
   // Warn about slow queries
@@ -893,25 +953,41 @@ async function handleGet(req, res) {
     console.warn(`SLOW QUERY WARNING: Students API took ${responseTime}ms`)
   }
 
+  // Calculate pagination info
+  const currentPageSize = studentsWithStats.length
+  const totalPages = actualLimit < 999999 ? Math.ceil((totalCounts.filtered_total || 0) / actualLimit) : 1
+  const hasMore = actualLimit < 999999 && currentPageSize === actualLimit
+  const hasPrevious = parseInt(page) > 1
+
   res.json({
     success: true,
     data: student_id ? studentsWithStats[0] : studentsWithStats,
-    students: student_id ? undefined : studentsWithStats, // Keep backward compatibility
+    students: student_id ? undefined : studentsWithStats, // Backward compatibility
     
-    // FIXED: Include total counts for dashboard statistics
+    // FIXED: Complete totals object
     totals: {
-      total_students: totalCounts.total || studentsWithStats.length,
+      total_students: totalCounts.total || studentsWithStats.length, // Unfiltered total (for dashboard)
       active_students: totalCounts.active || studentsWithStats.filter(s => s.is_active).length,
-      inactive_students: totalCounts.inactive || studentsWithStats.filter(s => !s.is_active).length
+      inactive_students: totalCounts.inactive || studentsWithStats.filter(s => !s.is_active).length,
+      filtered_total: totalCounts.filtered_total || studentsWithStats.length, // Total matching current filters
+      current_page_count: currentPageSize
     },
     
+    // ENHANCED: Complete pagination info
     pagination: {
       page: parseInt(page),
-      limit: parseInt(limit),
+      limit: actualLimit,
       offset: calculatedOffset,
-      has_more: studentsWithStats.length === parseInt(limit),
-      total_records: totalCounts.total || studentsWithStats.length, // Actual total in database
-      current_page_count: studentsWithStats.length // Count on current page
+      has_more: hasMore,
+      has_previous: hasPrevious,
+      total_pages: totalPages,
+      total_records: totalCounts.filtered_total || studentsWithStats.length, // Records matching filters
+      current_page_count: currentPageSize,
+      showing_range: {
+        from: calculatedOffset + 1,
+        to: calculatedOffset + currentPageSize,
+        of: totalCounts.filtered_total || studentsWithStats.length
+      }
     },
     
     filters: {
@@ -921,14 +997,16 @@ async function handleGet(req, res) {
       active_only: active_only === 'true'
     },
     
-    // DEPRECATED: Keep for backward compatibility
+    // Backward compatibility
     count: studentsWithStats.length,
-    total: totalCounts.total || studentsWithStats.length, // For backward compatibility
+    total: totalCounts.filtered_total || studentsWithStats.length,
     
     performance: {
       query_time_ms: responseTime,
-      data_size_kb: Math.round(dataSize / 1024)
+      data_size_kb: Math.round(dataSize / 1024),
+      stats_included: include_stats === 'true' && studentsWithStats.length <= 100
     },
+    
     timestamp: new Date().toISOString()
   })
 }

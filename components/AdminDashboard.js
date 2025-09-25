@@ -1500,16 +1500,564 @@ function SchoolSettingsTab({ user }) {
 }
 
 
-function StudentsTab({ students, onRefresh, user }) {
+// function StudentsTab({ students, onRefresh, user }) {
+//   const [searchTerm, setSearchTerm] = useState('')
+//   const [filterStatus, setFilterStatus] = useState('all')
+//   const [selectedGrade, setSelectedGrade] = useState('')
+//   const [loading, setLoading] = useState(false)
+//   const [showModal, setShowModal] = useState(false)
+//   const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
+//   const [selectedStudent, setSelectedStudent] = useState(null)
+//   const [grades, setGrades] = useState([])
+  
+//   const [studentForm, setStudentForm] = useState({
+//     name: '',
+//     grade: '',
+//     student_code: '',
+//     parent_password: '',
+//     is_active: true
+//   })
+
+//   const [showPasswords, setShowPasswords] = useState({
+//     addPassword: false,
+//     editPassword: false
+//   })
+
+//   const togglePasswordVisibility = (field) => {
+//     setShowPasswords(prev => ({
+//       ...prev,
+//       [field]: !prev[field]
+//     }))
+//   }
+
+//   // Extract unique grades from students
+//   useEffect(() => {
+//     const uniqueGrades = [...new Set(students.map(s => s.grade).filter(Boolean))].sort()
+//     setGrades(uniqueGrades)
+//   }, [students])
+
+//   const filteredStudents = students.filter(student => {
+//     const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.studentCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+//     const matchesFilter = filterStatus === 'all' ||
+//                          (filterStatus === 'with_password' && (student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'without_password' && !(student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'active' && student.is_active !== false) ||
+//                          (filterStatus === 'inactive' && student.is_active === false)
+    
+//     const matchesGrade = !selectedGrade || student.grade === selectedGrade
+    
+//     return matchesSearch && matchesFilter && matchesGrade
+//   })
+
+//   const resetForm = () => {
+//     setStudentForm({
+//       name: '',
+//       grade: '',
+//       student_code: '',
+//       parent_password: '',
+//       is_active: true
+//     })
+//   }
+
+//   // Modal handlers
+//   const openModal = (type, student = null) => {
+//     setModalType(type)
+//     setSelectedStudent(student)
+    
+//     if (type === 'edit' && student) {
+//       setStudentForm({
+//         name: student.name || '',
+//         grade: student.grade || '',
+//         student_code: student.student_code || student.studentCode || '',
+//         parent_password: '',
+//         is_active: student.is_active !== false
+//       })
+//     } else if (type === 'add') {
+//       resetForm()
+//       if (selectedGrade) {
+//         setStudentForm(prev => ({ ...prev, grade: selectedGrade }))
+//       }
+//     }
+    
+//     setShowModal(true)
+//   }
+
+//   const closeModal = () => {
+//     setShowModal(false)
+//     setModalType('')
+//     setSelectedStudent(null)
+//     resetForm()
+//     setShowPasswords({
+//     addPassword: false,
+//     editPassword: false
+//   })
+//   }
+
+//   // CRUD operations
+//   const handleSave = async (e) => {
+//     e.preventDefault()
+    
+//     if (!studentForm.name.trim()) {
+//       alert('Student name is required')
+//       return
+//     }
+
+//     setLoading(true)
+    
+//     try {
+//       let response
+      
+//       if (modalType === 'add') {
+//         response = await fetch('/api/students', {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify({
+//             ...studentForm,
+//             school_id: user.school_id || user.SchoolID,
+//             name: studentForm.name.trim()
+//           })
+//         })
+//       } else if (modalType === 'edit') {
+//         response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//           method: 'PUT',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify(studentForm)
+//         })
+//       }
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
+//       } else {
+//         alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error(`${modalType} student error:`, error)
+//       alert(`Failed to ${modalType} student: Network error`)
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   const handleDelete = async (force = false) => {
+//     setLoading(true)
+    
+//     try {
+//       const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//         method: 'DELETE',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify({ force_delete: force })
+//       })
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(result.message || 'Student deleted successfully!')
+//       } else {
+//         alert('Failed to delete student: ' + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error('Delete student error:', error)
+//       alert('Failed to delete student: Network error')
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   return (
+//     <div>
+//       {/* Header */}
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <div>
+//           <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
+//           <p className="text-gray-600 text-sm">
+//             {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
+//             ({filteredStudents.length} of {students.length} total)
+//           </p>
+//         </div>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <button 
+//             onClick={onRefresh} 
+//             disabled={loading}
+//             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
+//           >
+//             {loading ? 'Loading...' : 'Refresh'}
+//           </button>
+//           <button 
+//             onClick={() => openModal('add')}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+//           >
+//             Add Student
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Filters */}
+//       <div className="flex flex-col sm:flex-row gap-4 mb-6">
+//         <div className="flex-1">
+//           <input
+//             type="text"
+//             placeholder="Search by name or student code..."
+//             value={searchTerm}
+//             onChange={(e) => setSearchTerm(e.target.value)}
+//             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+//           />
+//         </div>
+        
+//         {/* Grade Filter */}
+//         {grades.length > 0 && (
+//           <select
+//             value={selectedGrade}
+//             onChange={(e) => setSelectedGrade(e.target.value)}
+//             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//           >
+//             <option value="">All Grades</option>
+//             {grades.map((grade) => (
+//               <option key={grade} value={grade}>
+//                 Grade {grade}
+//               </option>
+//             ))}
+//           </select>
+//         )}
+        
+//         <select
+//           value={filterStatus}
+//           onChange={(e) => setFilterStatus(e.target.value)}
+//           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//         >
+//           <option value="all">All Students</option>
+//           <option value="active">Active Students</option>
+//           <option value="inactive">Inactive Students</option>
+//           <option value="with_password">With Parent Password</option>
+//           <option value="without_password">Need Parent Setup</option>
+//         </select>
+//       </div>
+
+//       {/* Students Table */}
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <table className="min-w-full divide-y divide-gray-200">
+//             <thead className="bg-gray-50">
+//               <tr>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Student
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Grade
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                   Student Code
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Status
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Actions
+//                 </th>
+//               </tr>
+//             </thead>
+//             <tbody className="bg-white divide-y divide-gray-200">
+//               {filteredStudents.length > 0 ? filteredStudents.map((student) => (
+//                 <tr key={student.id || student.student_id}>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
+//                     <div className="text-xs text-gray-500">ID: {student.id || student.student_id}</div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm text-gray-500">{student.grade || 'Not set'}</div>
+//                     <div className="text-xs text-gray-500">
+//                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                         (student.parentPasswordSet || student.parent_password_set) ? 
+//                         'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+//                       }`}>
+//                         {(student.parentPasswordSet || student.parent_password_set) ? 'Parent OK' : 'Setup needed'}
+//                       </span>
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
+//                     <div className="text-sm font-mono text-gray-900">
+//                       {student.studentCode || student.student_code || 'Not set'}
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                       student.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+//                     }`}>
+//                       {student.is_active !== false ? 'Active' : 'Inactive'}
+//                     </span>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+//                     <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+//                       <button 
+//                         onClick={() => openModal('view', student)}
+//                         className="text-blue-600 hover:text-blue-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         View
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('edit', student)}
+//                         className="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Edit
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('delete', student)}
+//                         className="text-red-600 hover:text-red-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Delete
+//                       </button>
+//                     </div>
+//                   </td>
+//                 </tr>
+//               )) : (
+//                 <tr>
+//                   <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+//                     {selectedGrade ? `No students found in Grade ${selectedGrade}` : 'No students found'}
+//                   </td>
+//                 </tr>
+//               )}
+//             </tbody>
+//           </table>
+//         </div>
+//       </div>
+
+//       {/* Grade Summary Cards */}
+//       {grades.length > 0 && (
+//         <div className="mt-6 bg-white p-4 rounded-lg shadow border">
+//           <h4 className="text-md font-medium text-gray-900 mb-3">Grade Distribution</h4>
+//           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+//             {grades.map((grade) => (
+//               <div 
+//                 key={grade}
+//                 className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
+//                   selectedGrade === grade 
+//                     ? 'bg-blue-100 border-2 border-blue-500' 
+//                     : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+//                 }`}
+//                 onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
+//               >
+//                 <div className="text-sm font-bold text-gray-900">Grade {grade}</div>
+//                 <div className="text-xs text-gray-600">
+//                   {students.filter(s => s.grade === grade).length} students
+//                 </div>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Modal */}
+//       {showModal && (
+//         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+//           <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+//             <div className="flex justify-between items-center mb-4">
+//               <h4 className="text-lg font-semibold text-gray-900">
+//                 {modalType === 'add' && 'Add New Student'}
+//                 {modalType === 'edit' && 'Edit Student'}
+//                 {modalType === 'delete' && 'Delete Student'}
+//                 {modalType === 'view' && 'Student Details'}
+//               </h4>
+//               <button
+//                 onClick={closeModal}
+//                 className="text-gray-400 hover:text-gray-600"
+//               >
+//                 ✕
+//               </button>
+//             </div>
+
+//             {/* Modal Content */}
+//             {(modalType === 'add' || modalType === 'edit') && (
+//               <form onSubmit={handleSave} className="space-y-4">
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Name *
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.name}
+//                     onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Enter full name"
+//                     required
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Grade
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.grade}
+//                     onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="e.g., 10th, Grade 5"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Code
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.student_code}
+//                     onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Optional unique code"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Parent Password
+//                   </label>
+//                   <div className="relative">
+//                     <input
+//                       type={showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? "text" : "password"}
+//                       value={studentForm.parent_password}
+//                       onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
+//                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                       placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
+//                     />
+//                     <button
+//                       type="button"
+//                       onClick={() => togglePasswordVisibility(modalType === 'add' ? 'addPassword' : 'editPassword')}
+//                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+//                     >
+//                       {showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+//                         </svg>
+//                       ) : (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+//                         </svg>
+//                       )}
+//                     </button>
+//                   </div>
+//                 </div>
+
+//                 <div className="flex items-center">
+//                   <input
+//                     type="checkbox"
+//                     checked={studentForm.is_active}
+//                     onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+//                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+//                   />
+//                   <label className="ml-2 block text-sm text-gray-900">Active</label>
+//                 </div>
+
+//                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
+//                   <button
+//                     type="submit"
+//                     disabled={loading}
+//                     className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+//                   >
+//                     {loading ? (modalType === 'add' ? 'Adding...' : 'Updating...') : (modalType === 'add' ? 'Add Student' : 'Update Student')}
+//                   </button>
+//                   <button
+//                     type="button"
+//                     onClick={closeModal}
+//                     disabled={loading}
+//                     className="w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                 </div>
+//               </form>
+//             )}
+
+//             {modalType === 'view' && selectedStudent && (
+//               <div className="space-y-3">
+//                 <p><strong>Name:</strong> {selectedStudent.name}</p>
+//                 <p><strong>Student ID:</strong> {selectedStudent.id || selectedStudent.student_id}</p>
+//                 <p><strong>Grade:</strong> {selectedStudent.grade || 'Not set'}</p>
+//                 <p><strong>Student Code:</strong> {selectedStudent.student_code || selectedStudent.studentCode || 'Not set'}</p>
+//                 <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
+//                 <p><strong>Parent Password:</strong> {(selectedStudent.parentPasswordSet || selectedStudent.parent_password_set) ? 'Set' : 'Not set'}</p>
+//                 <p><strong>Last Activity:</strong> {
+//                   selectedStudent.last_activity 
+//                     ? new Date(selectedStudent.last_activity).toLocaleString()
+//                     : 'No activity'
+//                 }</p>
+//                 <div className="flex justify-end mt-6">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Close
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+
+//             {modalType === 'delete' && selectedStudent && (
+//               <div>
+//                 <p className="text-gray-700 mb-4">
+//                   Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
+//                 </p>
+//                 <div className="flex justify-end space-x-3">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(false)}
+//                     className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Deactivate'}
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(true)}
+//                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Force Delete'}
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+function StudentsTab({ onRefresh, user }) {
+  // STATE MANAGEMENT
+  const [students, setStudents] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [selectedGrade, setSelectedGrade] = useState('')
   const [loading, setLoading] = useState(false)
   const [showModal, setShowModal] = useState(false)
-  const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
+  const [modalType, setModalType] = useState('')
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [grades, setGrades] = useState([])
   
+  // NEW: Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalStudents, setTotalStudents] = useState(0)
+  const [filteredTotal, setFilteredTotal] = useState(0)
+  const [pagination, setPagination] = useState({})
+
   const [studentForm, setStudentForm] = useState({
     name: '',
     grade: '',
@@ -1523,6 +2071,15 @@ function StudentsTab({ students, onRefresh, user }) {
     editPassword: false
   })
 
+  // Page size options
+  const pageSizeOptions = [
+    { value: 20, label: '20' },
+    { value: 50, label: '50' },
+    { value: 100, label: '100' },
+    { value: 200, label: '200' },
+    { value: 'all', label: 'All' }
+  ]
+
   const togglePasswordVisibility = (field) => {
     setShowPasswords(prev => ({
       ...prev,
@@ -1530,27 +2087,140 @@ function StudentsTab({ students, onRefresh, user }) {
     }))
   }
 
-  // Extract unique grades from students
-  useEffect(() => {
-    const uniqueGrades = [...new Set(students.map(s => s.grade).filter(Boolean))].sort()
-    setGrades(uniqueGrades)
-  }, [students])
+  // MODIFIED: Load students from API with pagination
+  const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFilter = '', statusFilter = 'all') => {
+    setLoading(true)
+    try {
+      const schoolId = user?.SchoolID || user?.school_id
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        school_id: schoolId,
+        page: page,
+        limit: limit === 'all' ? '999999' : limit,
+        include_stats: 'false' // Don't include stats for list view for better performance
+      })
+      
+      // Add filters
+      if (searchTerm.trim()) {
+        params.append('search', searchTerm.trim())
+      }
+      
+      if (gradeFilter) {
+        params.append('grade', gradeFilter)
+      }
+      
+      // Convert status filter to API parameters
+      if (statusFilter === 'active' || statusFilter === 'inactive') {
+        params.append('active_only', statusFilter === 'active' ? 'true' : 'false')
+      } else if (statusFilter === 'active') {
+        params.append('active_only', 'true')
+      }
+      
+      console.log('Loading students with params:', params.toString())
+      
+      const response = await fetch(`/api/students?${params}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        const studentsData = data.data || data.students || []
+        setStudents(studentsData)
+        setTotalStudents(data.totals?.total_students || data.total || studentsData.length)
+        setFilteredTotal(data.totals?.filtered_total || data.total || studentsData.length)
+        setPagination(data.pagination || {})
+        
+        // Extract grades from API or current data
+        if (studentsData.length > 0) {
+          const uniqueGrades = [...new Set(studentsData.map(s => s.grade).filter(Boolean))].sort()
+          setGrades(uniqueGrades)
+        }
+        
+        console.log('Students loaded:', {
+          page,
+          limit,
+          total: data.totals?.total_students,
+          filtered: data.totals?.filtered_total,
+          returned: studentsData.length
+        })
+      } else {
+        console.error('Failed to load students:', data.error)
+        setStudents([])
+      }
+    } catch (error) {
+      console.error('Error loading students:', error)
+      setStudents([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.studentCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Load grades separately for filter dropdown
+  const loadGrades = async () => {
+    try {
+      const schoolId = user?.SchoolID || user?.school_id
+      const response = await fetch(`/api/students?type=grades&school_id=${schoolId}`)
+      const data = await response.json()
+      
+      if (data.success && data.grades) {
+        setGrades(data.grades)
+      }
+    } catch (error) {
+      console.error('Error loading grades:', error)
+    }
+  }
+
+  // MODIFIED: Handle search with server-side filtering
+  const handleSearchChange = (value) => {
+    setSearchTerm(value)
+    setCurrentPage(1) // Reset to first page when searching
     
-    const matchesFilter = filterStatus === 'all' ||
-                         (filterStatus === 'with_password' && (student.parentPasswordSet || student.parent_password_set)) ||
-                         (filterStatus === 'without_password' && !(student.parentPasswordSet || student.parent_password_set)) ||
-                         (filterStatus === 'active' && student.is_active !== false) ||
-                         (filterStatus === 'inactive' && student.is_active === false)
-    
-    const matchesGrade = !selectedGrade || student.grade === selectedGrade
-    
-    return matchesSearch && matchesFilter && matchesGrade
-  })
+    // Debounce search
+    clearTimeout(window.searchTimeout)
+    window.searchTimeout = setTimeout(() => {
+      loadStudents(1, pageSize, value, selectedGrade, filterStatus)
+    }, 500)
+  }
+
+  // MODIFIED: Handle filter changes with server-side filtering
+  const handleGradeChange = (value) => {
+    setSelectedGrade(value)
+    setCurrentPage(1)
+    loadStudents(1, pageSize, searchTerm, value, filterStatus)
+  }
+
+  const handleStatusChange = (value) => {
+    setFilterStatus(value)
+    setCurrentPage(1)
+    loadStudents(1, pageSize, searchTerm, selectedGrade, value)
+  }
+
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize)
+    setCurrentPage(1)
+    loadStudents(1, newPageSize, searchTerm, selectedGrade, filterStatus)
+  }
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    loadStudents(newPage, pageSize, searchTerm, selectedGrade, filterStatus)
+  }
+
+  // MODIFIED: Refresh function
+  const handleRefresh = () => {
+    loadStudents(currentPage, pageSize, searchTerm, selectedGrade, filterStatus)
+    if (onRefresh) onRefresh() // Also call parent refresh for dashboard stats
+  }
+
+  // Load initial data
+  useEffect(() => {
+    loadStudents(1, pageSize)
+    loadGrades()
+  }, [])
+
+  // REMOVED: Client-side filtering (now done server-side)
+  const filteredStudents = students // Students are already filtered server-side
 
   const resetForm = () => {
     setStudentForm({
@@ -1591,9 +2261,9 @@ function StudentsTab({ students, onRefresh, user }) {
     setSelectedStudent(null)
     resetForm()
     setShowPasswords({
-    addPassword: false,
-    editPassword: false
-  })
+      addPassword: false,
+      editPassword: false
+    })
   }
 
   // CRUD operations
@@ -1632,7 +2302,7 @@ function StudentsTab({ students, onRefresh, user }) {
       
       if (result.success) {
         closeModal()
-        onRefresh()
+        handleRefresh() // Reload current page
         alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
       } else {
         alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
@@ -1659,7 +2329,7 @@ function StudentsTab({ students, onRefresh, user }) {
       
       if (result.success) {
         closeModal()
-        onRefresh()
+        handleRefresh() // Reload current page
         alert(result.message || 'Student deleted successfully!')
       } else {
         alert('Failed to delete student: ' + (result.error || 'Unknown error'))
@@ -1679,13 +2349,23 @@ function StudentsTab({ students, onRefresh, user }) {
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
           <p className="text-gray-600 text-sm">
-            {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
-            ({filteredStudents.length} of {students.length} total)
+            {/* UPDATED: Show correct counts */}
+            {filteredTotal !== totalStudents ? (
+              <>
+                Showing {pagination.showing_range?.from || 1}-{pagination.showing_range?.to || students.length} 
+                of {filteredTotal} filtered results ({totalStudents} total students)
+              </>
+            ) : (
+              <>
+                Showing {pagination.showing_range?.from || 1}-{pagination.showing_range?.to || students.length} 
+                of {totalStudents} students
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button 
-            onClick={onRefresh} 
+            onClick={handleRefresh} 
             disabled={loading}
             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
           >
@@ -1700,24 +2380,25 @@ function StudentsTab({ students, onRefresh, user }) {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Search by name or student code..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-        </div>
-        
-        {/* Grade Filter */}
-        {grades.length > 0 && (
+      {/* UPDATED: Filters and Pagination Controls */}
+      <div className="bg-gray-50 p-4 rounded-lg mb-6">
+        <div className="flex flex-col lg:flex-row gap-4 mb-4">
+          {/* Search */}
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search by name or student code..."
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+          
+          {/* Grade Filter */}
           <select
             value={selectedGrade}
-            onChange={(e) => setSelectedGrade(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+            onChange={(e) => handleGradeChange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           >
             <option value="">All Grades</option>
             {grades.map((grade) => (
@@ -1726,19 +2407,63 @@ function StudentsTab({ students, onRefresh, user }) {
               </option>
             ))}
           </select>
-        )}
-        
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
-        >
-          <option value="all">All Students</option>
-          <option value="active">Active Students</option>
-          <option value="inactive">Inactive Students</option>
-          <option value="with_password">With Parent Password</option>
-          <option value="without_password">Need Parent Setup</option>
-        </select>
+          
+          {/* Status Filter */}
+          <select
+            value={filterStatus}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            <option value="all">All Students</option>
+            <option value="active">Active Students</option>
+            <option value="inactive">Inactive Students</option>
+            <option value="with_password">With Parent Password</option>
+            <option value="without_password">Need Parent Setup</option>
+          </select>
+        </div>
+
+        {/* NEW: Pagination Controls */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Items per page:</label>
+            <select 
+              value={pageSize} 
+              onChange={(e) => handlePageSizeChange(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-sm"
+            >
+              {pageSizeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Page navigation - only show if not showing all */}
+          {pageSize !== 'all' && pagination.total_pages > 1 && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={!pagination.has_previous || loading}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                Previous
+              </button>
+              
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {pagination.total_pages}
+              </span>
+              
+              <button 
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!pagination.has_more || loading}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Students Table */}
@@ -1765,7 +2490,16 @@ function StudentsTab({ students, onRefresh, user }) {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStudents.length > 0 ? filteredStudents.map((student) => (
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                      Loading students...
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredStudents.length > 0 ? filteredStudents.map((student) => (
                 <tr key={student.id || student.student_id}>
                   <td className="px-3 sm:px-6 py-4">
                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
@@ -1823,7 +2557,9 @@ function StudentsTab({ students, onRefresh, user }) {
               )) : (
                 <tr>
                   <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                    {selectedGrade ? `No students found in Grade ${selectedGrade}` : 'No students found'}
+                    {searchTerm || selectedGrade || filterStatus !== 'all' ? 
+                      'No students match your filters' : 'No students found'
+                    }
                   </td>
                 </tr>
               )}
@@ -1832,27 +2568,34 @@ function StudentsTab({ students, onRefresh, user }) {
         </div>
       </div>
 
-      {/* Grade Summary Cards */}
-      {grades.length > 0 && (
-        <div className="mt-6 bg-white p-4 rounded-lg shadow border">
-          <h4 className="text-md font-medium text-gray-900 mb-3">Grade Distribution</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {grades.map((grade) => (
-              <div 
-                key={grade}
-                className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedGrade === grade 
-                    ? 'bg-blue-100 border-2 border-blue-500' 
-                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                }`}
-                onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
-              >
-                <div className="text-sm font-bold text-gray-900">Grade {grade}</div>
-                <div className="text-xs text-gray-600">
-                  {students.filter(s => s.grade === grade).length} students
-                </div>
-              </div>
-            ))}
+      {/* Footer Pagination (for convenience) */}
+      {pageSize !== 'all' && pagination.total_pages > 1 && !loading && (
+        <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Showing {pagination.showing_range?.from || 1} to {pagination.showing_range?.to || students.length} 
+            of {filteredTotal} results
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!pagination.has_previous}
+              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+            >
+              Previous
+            </button>
+            
+            <span className="text-sm text-gray-600">
+              {currentPage} of {pagination.total_pages}
+            </span>
+            
+            <button 
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!pagination.has_more}
+              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+            >
+              Next
+            </button>
           </div>
         </div>
       )}
@@ -2039,7 +2782,6 @@ function StudentsTab({ students, onRefresh, user }) {
     </div>
   )
 }
-
 
 function UploadStudentsTab({ user, onUploadComplete }) {
   const [file, setFile] = useState(null)

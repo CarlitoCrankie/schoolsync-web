@@ -269,26 +269,14 @@ export default function ParentContactManager({ user, onComplete, isRequired = fa
         <ul className="text-sm text-blue-700 space-y-1">
           <li>• SMS notifications sent instantly when {user.student_name} scans fingerprint</li>
           <li>• Email notifications include detailed attendance information</li>
+          <li>• <strong>Important:</strong> Check your email spam/junk folder for the first few notifications</li>
+          <li>• Add attendance@diamondattendance.com to your contacts to improve email delivery</li>
+          <li>• Mark emails as "Not Spam" if they appear in your spam folder</li>
           <li>• All information is stored securely and used only for attendance notifications</li>
           <li>• You can update your contact information anytime</li>
           <li>• Both email and phone are optional, but at least one is recommended</li>
         </ul>
       </div>
-
-      {/* Test Notification Section */}
-      {/* {hasContactInfo && !isRequired && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <h4 className="font-medium text-gray-900 mb-2">Test Notifications</h4>
-          <p className="text-sm text-gray-600 mb-3">
-            Want to test if notifications are working? You can simulate a check-in from the admin panel or ask your school administrator to test the system.
-          </p>
-          <div className="text-xs text-gray-500">
-            <p>Current contact methods:</p>
-            {contactInfo.email && <p>• Email: {contactInfo.email}</p>}
-            {contactInfo.phone && <p>• Phone: {contactInfo.phone}</p>}
-          </div>
-        </div>
-      )} */}
     </div>
   )
 }

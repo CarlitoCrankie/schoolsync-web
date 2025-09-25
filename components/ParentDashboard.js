@@ -2389,9 +2389,51 @@ function AttendanceTab({ attendanceData }) {
 function ContactTab({ user }) {
   return (
     <div className="space-y-6">
-      {/* Your existing ContactTab code */}
+      {/* Email Setup Instructions */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-yellow-400 text-xl">📧</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-lg font-medium text-yellow-800 mb-2">
+              Email Notification Setup
+            </h3>
+            <div className="text-sm text-yellow-700 space-y-2">
+              <p>To ensure you receive all attendance emails:</p>
+              <ol className="list-decimal list-inside space-y-1 ml-4">
+                <li>Add <code className="bg-yellow-200 px-1 rounded">attendance@diamondattendance.com</code> to your email contacts</li>
+                <li>Check your spam/junk folder for the first few notifications</li>
+                <li>If emails appear in spam, mark them as "Not Spam" or "Not Junk"</li>
+                <li>This will train your email provider to deliver future notifications to your inbox</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SMS Information */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-green-400 text-xl">📱</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-lg font-medium text-green-800 mb-2">
+              SMS Notifications
+            </h3>
+            <div className="text-sm text-green-700 space-y-2">
+              <p>SMS notifications are sent instantly and include a reminder to check your email for detailed information.</p>
+              <p>SMS format: <em>"Dear [Parent], [Student] has checked in/out on [Date] at [Time]. Email sent - check inbox/spam folder. - [School]"</em></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Contact Manager */}
       <ParentContactManager user={user} />
       
+      {/* School Contact Information */}
       <div className="bg-blue-50 rounded-lg p-6">
         <h4 className="text-lg font-semibold text-blue-900 mb-4">School Contact Information</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2414,7 +2456,28 @@ function ContactTab({ user }) {
         <div className="mt-4 pt-4 border-t border-blue-200">
           <p className="text-sm text-blue-600">
             For questions about attendance records or system issues, please contact your school's administration office.
+            <br />
+            <strong>Email delivery issues:</strong> If you're not receiving notifications, check your spam folder and contact settings above.
           </p>
+        </div>
+      </div>
+
+      {/* Technical Support */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+        <h4 className="text-lg font-semibold text-gray-900 mb-4">Technical Support</h4>
+        <div className="space-y-3 text-sm text-gray-700">
+          <div>
+            <p className="font-medium">Email not arriving?</p>
+            <p>Check spam folder, add our sender to contacts, and mark as "Not Spam" if needed</p>
+          </div>
+          <div>
+            <p className="font-medium">SMS not working?</p>
+            <p>Verify your phone number format includes country code (e.g., +233123456789)</p>
+          </div>
+          <div>
+            <p className="font-medium">System issues?</p>
+            <p>Contact your school's administration office for technical support</p>
+          </div>
         </div>
       </div>
     </div>
