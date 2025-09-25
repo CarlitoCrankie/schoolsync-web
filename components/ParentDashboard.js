@@ -2030,6 +2030,7 @@ function AttendanceTab({ attendanceData }) {
   const [timeSettings, setTimeSettings] = useState(null)
   const [enhancedAttendance, setEnhancedAttendance] = useState([])
   const [statusFilter, setStatusFilter] = useState('all')
+  const [showAbsent, setShowAbsent] = useState(false)
 
   useEffect(() => {
     loadTimeSettings()
@@ -2244,113 +2245,142 @@ function AttendanceTab({ attendanceData }) {
             >
               🟠 Early Out ({statusCounts['early-departure']})
             </button>
+
+            <button
+              onClick={() => setShowAbsent(false)}
+              className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                !showAbsent ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Present Days ({attendanceData.length})
+            </button>
+            <button
+              onClick={() => setShowAbsent(true)}
+              className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                showAbsent ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Absent Days
+            </button>
           </div>
         </div>
       )}
 
-      {sortedData.length > 0 ? (
-        <div className="overflow-x-auto bg-white rounded-lg shadow">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort('date')}
-                >
-                  <div className="flex items-center">
-                    Date
-                    {getSortIcon('date')}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort('status')}
-                >
-                  <div className="flex items-center">
-                    Action
-                    {getSortIcon('status')}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort('time')}
-                >
-                  <div className="flex items-center">
-                    Time
-                    {getSortIcon('time')}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {sortedData.map((record, index) => (
-                <tr key={record.id || index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 font-medium">
-                      {new Date(record.scanTime || record.date).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
+{showAbsent ? (
+  <div className="text-center py-12 bg-white rounded-lg shadow">
+    <div className="text-red-400 text-4xl mb-4">❌</div>
+    <h4 className="text-lg font-medium text-gray-900 mb-2">Absent Days</h4>
+    <p className="text-gray-500">
+      This feature will show days when your child was marked absent.
+      <br />
+      Currently showing attendance records only.
+    </p>
+  </div>
+) : (
+  sortedData.length > 0 ? (
+    <div className="overflow-x-auto bg-white rounded-lg shadow">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              onClick={() => handleSort('date')}
+            >
+              <div className="flex items-center">
+                Date
+                {getSortIcon('date')}
+              </div>
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              onClick={() => handleSort('status')}
+            >
+              <div className="flex items-center">
+                Action
+                {getSortIcon('status')}
+              </div>
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              onClick={() => handleSort('time')}
+            >
+              <div className="flex items-center">
+                Time
+                {getSortIcon('time')}
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {sortedData.map((record, index) => (
+            <tr key={record.id || index} className="hover:bg-gray-50">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm text-gray-900 font-medium">
+                  {new Date(record.scanTime || record.date).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                {/* Enhanced status badge when time settings available */}
+                {record.statusType && timeSettings ? (
+                  <span className={getStatusBadgeClasses(record.statusType)}>
+                    {getStatusIcon(record.statusType)} {record.statusLabel}
+                  </span>
+                ) : (
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    record.status === 'IN' ? 'bg-green-100 text-green-800' :
+                    record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {record.status === 'IN' ? 'Check In' : 
+                     record.status === 'OUT' ? 'Check Out' : 
+                     record.status || 'Unknown'}
+                  </span>
+                )}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {record.scanTime ? (
+                  <div>
+                    <div className="font-medium">
+                      {formatTime(record.scanTime)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(record.scanTime).toLocaleTimeString('en-US', {
+                        hour12: false
                       })}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {/* Enhanced status badge when time settings available */}
-                    {record.statusType && timeSettings ? (
-                      <span className={getStatusBadgeClasses(record.statusType)}>
-                        {getStatusIcon(record.statusType)} {record.statusLabel}
-                      </span>
-                    ) : (
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        record.status === 'IN' ? 'bg-green-100 text-green-800' :
-                        record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {record.status === 'IN' ? 'Check In' : 
-                         record.status === 'OUT' ? 'Check Out' : 
-                         record.status || 'Unknown'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.scanTime ? (
-                      <div>
-                        <div className="font-medium">
-                          {formatTime(record.scanTime)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(record.scanTime).toLocaleTimeString('en-US', {
-                            hour12: false
-                          })}
-                        </div>
-                        {/* Show enhanced message if available */}
-                        {record.message && timeSettings && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            {record.message}
-                          </div>
-                        )}
+                    {/* Show enhanced message if available */}
+                    {record.message && timeSettings && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        {record.message}
                       </div>
-                    ) : (
-                      <span className="text-gray-400">No time recorded</span>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <div className="text-gray-400 text-4xl mb-4">📊</div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">
-            {statusFilter === 'all' ? 'No attendance records found' : `No ${statusFilter.replace('-', ' ')} records found`}
-          </h4>
-          <p className="text-gray-500">
-            Records will appear here when your child uses the fingerprint scanner
-          </p>
-        </div>
-      )}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">No time recorded</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <div className="text-center py-12 bg-white rounded-lg shadow">
+      <div className="text-gray-400 text-4xl mb-4">📊</div>
+      <h4 className="text-lg font-medium text-gray-900 mb-2">
+        {statusFilter === 'all' ? 'No attendance records found' : `No ${statusFilter.replace('-', ' ')} records found`}
+      </h4>
+      <p className="text-gray-500">
+        Records will appear here when your child uses the fingerprint scanner
+      </p>
+    </div>
+  )
+)}
     </div>
   )
 }

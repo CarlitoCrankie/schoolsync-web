@@ -566,6 +566,11 @@ async function handleGet(req, res) {
 }
 
 async function handlePost(req, res) {
+       // Check if this is an action-based request
+  if (req.body.action) {
+    return await handleAction(req, res)
+  }
+
   const { name, school_id, grade, student_code, parent_password, is_active = true } = req.body
   
   if (!name || !school_id) {
@@ -643,6 +648,84 @@ async function handlePost(req, res) {
     },
     message: 'Student created successfully',
     timestamp: new Date().toISOString()
+  })
+
+}
+
+async function handleAction(req, res) {
+  const { action } = req.body
+
+  if (action === 'get_absent_students') {
+    const { school_id, date } = req.body
+    
+    if (!school_id || !date) {
+      return res.status(400).json({
+        success: false,
+        error: 'School ID and date are required for get_absent_students action'
+      })
+    }
+
+    try {
+      const pool = await getPool()
+      
+      // Get all active students for the school
+      const allStudentsQuery = `
+        SELECT StudentID, Name, Grade 
+        FROM Students 
+        WHERE SchoolID = @schoolId AND IsActive = 1
+      `
+      
+      // Get students who had attendance today (unique students)
+      const presentStudentsQuery = `
+        SELECT DISTINCT st.StudentID
+        FROM Students st
+        INNER JOIN Attendance a ON st.StudentID = a.StudentID
+        WHERE st.SchoolID = @schoolId 
+        AND st.IsActive = 1
+        AND CAST(a.ScanTime as DATE) = @date
+      `
+      
+      const request = pool.request()
+      request.input('schoolId', sql.Int, parseInt(school_id))
+      request.input('date', sql.Date, new Date(date))
+      
+      const [allStudentsResult, presentStudentsResult] = await Promise.all([
+        request.query(allStudentsQuery),
+        request.query(presentStudentsQuery)
+      ])
+      
+      const allStudents = allStudentsResult.recordset
+      const presentStudentIds = new Set(presentStudentsResult.recordset.map(s => s.StudentID))
+      
+      // Students who are not in the present list are absent
+      const absentStudents = allStudents.filter(student => 
+        !presentStudentIds.has(student.StudentID)
+      )
+      
+      return res.json({
+        success: true,
+        absent_students: absentStudents.map(student => ({
+          student_id: student.StudentID,
+          name: student.Name,
+          grade: student.Grade
+        })),
+        total_students: allStudents.length,
+        present_count: presentStudentIds.size,
+        absent_count: absentStudents.length,
+        date: date
+      })
+    } catch (error) {
+      console.error('Error in get_absent_students:', error)
+      return res.json({ 
+        success: false, 
+        error: error.message 
+      })
+    }
+  }
+
+  return res.status(400).json({
+    success: false,
+    error: 'Unknown action: ' + action
   })
 }
 
@@ -830,3 +913,4 @@ async function handleDelete(req, res) {
     timestamp: new Date().toISOString()
   })
 }
+

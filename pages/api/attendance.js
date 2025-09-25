@@ -283,46 +283,46 @@ async function calculateProperAttendanceStats(pool, studentId, schoolId, days) {
   }
 }
 
-// LEGACY: Keep the old function for backward compatibility, but mark it as deprecated
-function calculateAttendanceStats(records, days) {
-  console.warn('calculateAttendanceStats is deprecated. Use calculateProperAttendanceStats instead.')
+// // LEGACY: Keep the old function for backward compatibility, but mark it as deprecated
+// function calculateAttendanceStats(records, days) {
+//   console.warn('calculateAttendanceStats is deprecated. Use calculateProperAttendanceStats instead.')
   
-  // Group records by date to get unique days
-  const uniqueDays = new Set()
-  const lateDays = new Set()
+//   // Group records by date to get unique days
+//   const uniqueDays = new Set()
+//   const lateDays = new Set()
   
-  records.forEach(record => {
-    const date = record.date || record.scanTime.split('T')[0]
+//   records.forEach(record => {
+//     const date = record.date || record.scanTime.split('T')[0]
     
-    if (record.status === 'IN') {
-      uniqueDays.add(date)
+//     if (record.status === 'IN') {
+//       uniqueDays.add(date)
       
-      // Check if late (assuming 8:30 AM threshold)
-      const time = new Date(record.scanTime)
-      const hours = time.getHours()
-      const minutes = time.getMinutes()
+//       // Check if late (assuming 8:30 AM threshold)
+//       const time = new Date(record.scanTime)
+//       const hours = time.getHours()
+//       const minutes = time.getMinutes()
       
-      if (hours > 8 || (hours === 8 && minutes > 30)) {
-        lateDays.add(date)
-      }
-    }
-  })
+//       if (hours > 8 || (hours === 8 && minutes > 30)) {
+//         lateDays.add(date)
+//       }
+//     }
+//   })
   
-  const presentDays = uniqueDays.size
-  const expectedSchoolDays = Math.floor((days / 7) * 5) // Rough estimate
-  const absentDays = Math.max(0, expectedSchoolDays - presentDays)
-  const attendanceRate = expectedSchoolDays > 0 
-    ? Math.round((presentDays / expectedSchoolDays) * 100) 
-    : 0
+//   const presentDays = uniqueDays.size
+//   const expectedSchoolDays = Math.floor((days / 7) * 5) // Rough estimate
+//   const absentDays = Math.max(0, expectedSchoolDays - presentDays)
+//   const attendanceRate = expectedSchoolDays > 0 
+//     ? Math.round((presentDays / expectedSchoolDays) * 100) 
+//     : 0
   
-  return {
-    presentDays,
-    lateDays: lateDays.size,
-    absentDays,
-    attendanceRate,
-    totalRecords: records.length
-  }
-}
+//   return {
+//     presentDays,
+//     lateDays: lateDays.size,
+//     absentDays,
+//     attendanceRate,
+//     totalRecords: records.length
+//   }
+// }
 
 // Get attendance statistics
 // async function getAttendanceStats(pool, studentId, schoolId, days) {
@@ -406,62 +406,62 @@ async function getRecentActivity(pool, studentId, schoolId, limit) {
   }
 }
 
-// // Helper function to calculate attendance statistics
-// function calculateAttendanceStats(records, periodDays) {
-//   if (!records || records.length === 0) {
-//     return {
-//       totalDays: periodDays,
-//       presentDays: 0,
-//       lateDays: 0,
-//       absentDays: periodDays,
-//       attendanceRate: 0,
-//       checkIns: 0,
-//       checkOuts: 0
-//     }
-//   }
+// Helper function to calculate attendance statistics
+function calculateAttendanceStats(records, periodDays) {
+  if (!records || records.length === 0) {
+    return {
+      totalDays: periodDays,
+      presentDays: 0,
+      lateDays: 0,
+      absentDays: periodDays,
+      attendanceRate: 0,
+      checkIns: 0,
+      checkOuts: 0
+    }
+  }
 
-//   // Group records by date to determine daily attendance
-//   const dailyAttendance = {}
-//   let checkIns = 0
-//   let checkOuts = 0
+  // Group records by date to determine daily attendance
+  const dailyAttendance = {}
+  let checkIns = 0
+  let checkOuts = 0
 
-//   records.forEach(record => {
-//     const date = record.date || record.scanTime.split('T')[0]
+  records.forEach(record => {
+    const date = record.date || record.scanTime.split('T')[0]
     
-//     if (!dailyAttendance[date]) {
-//       dailyAttendance[date] = { hasCheckIn: false, hasCheckOut: false, records: [] }
-//     }
+    if (!dailyAttendance[date]) {
+      dailyAttendance[date] = { hasCheckIn: false, hasCheckOut: false, records: [] }
+    }
     
-//     dailyAttendance[date].records.push(record)
+    dailyAttendance[date].records.push(record)
     
-//     if (record.status === 'IN') {
-//       dailyAttendance[date].hasCheckIn = true
-//       checkIns++
-//     } else if (record.status === 'OUT') {
-//       dailyAttendance[date].hasCheckOut = true
-//       checkOuts++
-//     }
-//   })
+    if (record.status === 'IN') {
+      dailyAttendance[date].hasCheckIn = true
+      checkIns++
+    } else if (record.status === 'OUT') {
+      dailyAttendance[date].hasCheckOut = true
+      checkOuts++
+    }
+  })
 
-//   // Calculate attendance stats
-//   const uniqueDatesWithActivity = Object.keys(dailyAttendance).length
-//   const presentDays = Object.values(dailyAttendance).filter(day => day.hasCheckIn).length
+  // Calculate attendance stats
+  const uniqueDatesWithActivity = Object.keys(dailyAttendance).length
+  const presentDays = Object.values(dailyAttendance).filter(day => day.hasCheckIn).length
   
-//   // For simplicity, we'll consider any day with a check-in as present
-//   // In a more sophisticated system, you might have business rules for late arrivals
-//   const lateDays = 0 // Could be calculated based on check-in times vs school start time
-//   const absentDays = Math.max(0, periodDays - presentDays)
-//   const attendanceRate = periodDays > 0 ? ((presentDays / periodDays) * 100) : 0
+  // For simplicity, we'll consider any day with a check-in as present
+  // In a more sophisticated system, you might have business rules for late arrivals
+  const lateDays = 0 // Could be calculated based on check-in times vs school start time
+  const absentDays = Math.max(0, periodDays - presentDays)
+  const attendanceRate = periodDays > 0 ? ((presentDays / periodDays) * 100) : 0
 
-//   return {
-//     totalDays: periodDays,
-//     presentDays,
-//     lateDays,
-//     absentDays,
-//     attendanceRate: Math.round(attendanceRate * 10) / 10, // Round to 1 decimal place
-//     checkIns,
-//     checkOuts,
-//     activeDays: uniqueDatesWithActivity,
-//     lastActivity: records.length > 0 ? records[0].scanTime : null
-//   }
-// }
+  return {
+    totalDays: periodDays,
+    presentDays,
+    lateDays,
+    absentDays,
+    attendanceRate: Math.round(attendanceRate * 10) / 10, // Round to 1 decimal place
+    checkIns,
+    checkOuts,
+    activeDays: uniqueDatesWithActivity,
+    lastActivity: records.length > 0 ? records[0].scanTime : null
+  }
+}

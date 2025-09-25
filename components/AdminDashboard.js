@@ -107,6 +107,7 @@ export default function AdminDashboard({ user, onLogout }) {
     { id: 'attendance', label: 'Network', icon: '👥' },
     { id: 'schools', label: 'Schools', icon: '🏫' },
     { id: 'system-monitor', label: 'Monitor', icon: '⚡' },
+    { id: 'health-monitor', label: 'DB Health', icon: '🔍' }, 
     { id: 'analytics', label: 'Analytics', icon: '📈' }
   ] : [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -439,13 +440,11 @@ export default function AdminDashboard({ user, onLogout }) {
 
       const calculatedStats = {
         total_students: totalStudents,
-        present_today: presentToday, // Now uses the corrected unique count from API
+        present_today: presentToday, // This should already be unique from your backend
         absent_today: Math.max(0, totalStudents - presentToday),
         students_without_passwords: withoutPasswords,
         sync_status: syncAgentStatus,
-        // Add debug info
-        attendance_rate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0,
-        debug_records_today: overviewData?.debug_info?.attendance_records_today || 0
+        attendance_rate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0
       }
 
       console.log('Setting calculated stats:', calculatedStats)
@@ -506,6 +505,8 @@ export default function AdminDashboard({ user, onLogout }) {
       return 'error'
     }
   }
+
+
 
   // FIXED: Better loading state with user validation
   if (!user) {
@@ -655,7 +656,7 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
             </div>
             
-            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+            {/* <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
               <div className="flex items-center">
                 <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
                   <span className="text-green-600 text-sm sm:text-xl">✅</span>
@@ -675,6 +676,35 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div className="ml-2 sm:ml-4">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">Absent Today</p>
                   <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.absent_today}</p>
+                </div>
+              </div>
+            </div> */}
+
+            {/*In AdminDashboard component, update the present/absent cards to be clickable*/}
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => setActiveTab('attendance')}>
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <span className="text-green-600 text-sm sm:text-xl">✅</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Present Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.present_today}</p>
+                  <p className="text-xs text-green-600 hover:text-green-700">Click to view list →</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => setActiveTab('attendance')}>
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <span className="text-red-600 text-sm sm:text-xl">❌</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Absent Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.absent_today}</p>
+                  <p className="text-xs text-red-600 hover:text-red-700">Click to view list →</p>
                 </div>
               </div>
             </div>
@@ -769,11 +799,12 @@ export default function AdminDashboard({ user, onLogout }) {
           {activeTab === 'dashboard' && <DashboardTab attendance={attendance} stats={stats} isCompanyAdmin={isCompanyAdmin} user={user} setActiveTab={setActiveTab} schoolTimeSettings={schoolTimeSettings} />}
           {activeTab === 'students' && !isCompanyAdmin && <StudentsTab students={students} onRefresh={loadDashboardData} user={user} />}
           {activeTab === 'upload' && !isCompanyAdmin && <UploadStudentsTab user={user} onUploadComplete={loadDashboardData} />}
-          {activeTab === 'attendance' && <AttendanceTabMobileResponsive attendance={attendance} isCompanyAdmin={isCompanyAdmin} user={user} />}
+          {activeTab === 'attendance' && <AttendanceTabMobileResponsive attendance={attendance} isCompanyAdmin={isCompanyAdmin} user={user} stats={stats}/>}
           {activeTab === 'settings' && !isCompanyAdmin && <SchoolSettingsTab user={user} />}
           {activeTab === 'system-monitor' && isCompanyAdmin && <SystemMonitorTab companyId={user.company_id} user={user} />}
           {activeTab === 'schools' && isCompanyAdmin && <SchoolsNetworkTab companyId={user.company_id} user={user} />}
           {activeTab === 'analytics' && isCompanyAdmin && <AnalyticsTab companyId={user.company_id} user={user} />}
+          {activeTab === 'health-monitor' && isCompanyAdmin && <DatabaseHealthMonitor />}
         </div>
       </div>
     </div>
@@ -1925,7 +1956,7 @@ function UploadStudentsTab({ user, onUploadComplete }) {
   )
 }
 
-function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
+function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user, stats }) {
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0]
@@ -1938,12 +1969,17 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   const [gradeFilter, setGradeFilter] = useState('')
   const [availableGrades, setAvailableGrades] = useState([])
   const [exporting, setExporting] = useState(false)
+  const [attendanceFilter, setAttendanceFilter] = useState('present')
+  const [absentStudents, setAbsentStudents] = useState([])
 
-  useEffect(() => {
-    setAttendanceData(attendance)
-    loadTimeSettings()
-    loadAvailableGrades()
-  }, [attendance])
+useEffect(() => {
+  setAttendanceData(attendance)
+  loadTimeSettings()
+  loadAvailableGrades()
+  if (!isCompanyAdmin) {
+    loadAbsentStudents()
+  }
+}, [attendance])
 
   // Excel Export Function
   const exportToExcel = async () => {
@@ -2045,6 +2081,74 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
     }
   }
 
+// Add this function in AttendanceTabMobileResponsive
+const loadAbsentStudents = async () => {
+  if (isCompanyAdmin) return
+  
+  try {
+    const schoolId = user?.school_id || user?.SchoolID
+    if (!schoolId) return
+
+    const response = await fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_absent_students',
+        school_id: schoolId,
+        date: dateRange.to || new Date().toISOString().split('T')[0]
+      })
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      if (result.success) {
+        setAbsentStudents(result.absent_students || [])
+      }
+    }
+  } catch (error) {
+    console.error('Error loading absent students:', error)
+    // Fallback: calculate absent students from existing data
+    calculateAbsentStudents()
+  }
+}
+
+// Add this fallback calculation function
+const calculateAbsentStudents = async () => {
+  try {
+    const schoolId = user?.school_id || user?.SchoolID
+    if (!schoolId) return
+
+    // Get all active students
+    const studentsResponse = await fetch(`/api/students?school_id=${schoolId}&active_only=true`)
+    if (!studentsResponse.ok) return
+
+    const studentsResult = await studentsResponse.json()
+    if (!studentsResult.success) return
+
+    const allStudents = studentsResult.data || []
+    
+    // Get unique student IDs who were present today
+    const presentStudentIds = new Set(
+      attendanceData
+        .filter(record => {
+          const recordDate = new Date(record.scan_time || record.time || record.created_at).toDateString()
+          const today = new Date().toDateString()
+          return recordDate === today
+        })
+        .map(record => record.student_id)
+    )
+
+    // Students who are not in the present list are absent
+    const absentStudentsList = allStudents.filter(student => 
+      !presentStudentIds.has(student.student_id || student.id)
+    )
+
+    setAbsentStudents(absentStudentsList)
+  } catch (error) {
+    console.error('Error calculating absent students:', error)
+  }
+}
+
   const loadAvailableGrades = async () => {
     try {
       const schoolId = user?.school_id || user?.SchoolID
@@ -2145,21 +2249,27 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
   }, [dateRange.from, dateRange.to, gradeFilter])
 
   // Filter data based on status and grade filters
-  const filteredData = attendanceData.filter(record => {
-    // Status filter
-    const statusMatch = statusFilter === 'all' || (
-      timeSettings && (
-        (statusFilter === 'late' && record.statusType === 'late') ||
-        (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
-        (statusFilter === 'early-departure' && record.statusType === 'early-departure')
+const filteredData = attendanceFilter === 'present' 
+  ? attendanceData.filter(record => {
+      // Status filter
+      const statusMatch = statusFilter === 'all' || (
+        timeSettings && (
+          (statusFilter === 'late' && record.statusType === 'late') ||
+          (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
+          (statusFilter === 'early-departure' && record.statusType === 'early-departure')
+        )
       )
-    )
 
-    // Grade filter
-    const gradeMatch = !gradeFilter || record.grade === gradeFilter
+      // Grade filter
+      const gradeMatch = !gradeFilter || record.grade === gradeFilter
 
-    return statusMatch && gradeMatch
-  })
+      return statusMatch && gradeMatch
+    })
+  : absentStudents.filter(student => {
+      // Grade filter for absent students
+      const gradeMatch = !gradeFilter || student.grade === gradeFilter
+      return gradeMatch
+    })
 
   // Get status counts for filter buttons
   const getStatusCounts = () => {
@@ -2304,6 +2414,40 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
           </div>
         )}
 
+        {/* Present/Absent Filter - Only for school admins */}
+        {!isCompanyAdmin && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              View Students
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setAttendanceFilter('present')
+                  setStatusFilter('all')
+                }}
+                className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                  attendanceFilter === 'present' 
+                    ? 'bg-green-100 text-green-800 border-2 border-green-300' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Present Today ({stats?.present_today || 0})
+              </button>
+              <button
+                onClick={() => setAttendanceFilter('absent')}
+                className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                  attendanceFilter === 'absent' 
+                    ? 'bg-red-100 text-red-800 border-2 border-red-300' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Absent Today ({absentStudents.length})
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Status Filter Buttons */}
         {timeSettings && statusCounts.all > 0 && (
           <div>
@@ -2404,65 +2548,92 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                   )}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+<tbody className="bg-white divide-y divide-gray-200">
                 {filteredData && filteredData.length > 0 ? (
                   filteredData.slice(0, 50).map((record, index) => (
-                    <tr key={record.id || index} className="hover:bg-gray-50 transition-colors">
+                    <tr key={record.id || record.student_id || record.attendance_id || index} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 sm:px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {record.studentName || record.student_name || 'Unknown Student'}
+                          {attendanceFilter === 'present' 
+                            ? (record.studentName || record.student_name || 'Unknown Student')
+                            : (record.name || 'Unknown Student')
+                          }
                         </div>
                         <div className="text-xs text-gray-500">
-                          <div className="sm:hidden">
-                            {formatTime(record.scan_time || record.time || record.created_at)}
-                          </div>
+                          {attendanceFilter === 'present' ? (
+                            <div className="sm:hidden">
+                              {formatTime(record.scan_time || record.time || record.created_at)}
+                            </div>
+                          ) : (
+                            <span className="text-red-600">No attendance today</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4">
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {record.grade ? `Grade ${record.grade}` : 'N/A'}
+                          {(attendanceFilter === 'present' ? record.grade : record.grade) 
+                            ? `Grade ${attendanceFilter === 'present' ? record.grade : record.grade}` 
+                            : 'N/A'
+                          }
                         </span>
                       </td>
                       <td className="px-3 sm:px-6 py-4">
-                        <div className="space-y-1">
-                          {record.statusType && timeSettings ? (
-                            <span className={getStatusBadgeClasses(record.statusType)}>
-                              {getStatusIcon(record.statusType)} {record.statusLabel}
-                            </span>
-                          ) : (
-                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              record.status === 'IN' ? 'bg-green-100 text-green-800' : 
-                              record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {record.status === 'IN' ? 'Check In' : 
-                               record.status === 'OUT' ? 'Check Out' : 
-                               record.status || 'Unknown'}
-                            </span>
-                          )}
-                          {record.message && (
-                            <div className="text-xs text-gray-500 lg:hidden">
-                              {record.message}
-                            </div>
-                          )}
-                        </div>
+                        {attendanceFilter === 'present' ? (
+                          <div className="space-y-1">
+                            {record.statusType && timeSettings ? (
+                              <span className={getStatusBadgeClasses(record.statusType)}>
+                                {getStatusIcon(record.statusType)} {record.statusLabel}
+                              </span>
+                            ) : (
+                              <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+                                record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {record.status === 'IN' ? 'Check In' : 
+                                 record.status === 'OUT' ? 'Check Out' : 
+                                 record.status || 'Unknown'}
+                              </span>
+                            )}
+                            {record.message && (
+                              <div className="text-xs text-gray-500 lg:hidden">
+                                {record.message}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Absent
+                          </span>
+                        )}
                       </td>
-                      <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                        {formatTime(record.scan_time || record.time || record.created_at)}
-                      </td>
-                      <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                        {formatDate(record.scan_time || record.time || record.created_at)}
-                      </td>
+                      {attendanceFilter === 'present' && (
+                        <>
+                          <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                            {formatTime(record.scan_time || record.time || record.created_at)}
+                          </td>
+                          <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                            {formatDate(record.scan_time || record.time || record.created_at)}
+                          </td>
+                        </>
+                      )}
                       {isCompanyAdmin && (
                         <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
-                          {record.school_name || 'Unknown School'}
+                          {attendanceFilter === 'present' 
+                            ? (record.school_name || 'Unknown School')
+                            : (record.school_name || 'Unknown School')
+                          }
                         </td>
                       )}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={isCompanyAdmin ? "6" : "5"} className="px-6 py-12 text-center">
+                    <td colSpan={
+                      isCompanyAdmin 
+                        ? (attendanceFilter === 'present' ? "6" : "4")
+                        : (attendanceFilter === 'present' ? "5" : "3")
+                    } className="px-6 py-12 text-center">
                       <div className="text-gray-500">
                         {loading ? (
                           <div className="flex items-center justify-center">
@@ -2476,8 +2647,12 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
                           <div>
                             <div className="text-gray-400 text-4xl mb-2">📊</div>
                             <p className="font-medium">
-                              {statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
-                               `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`}
+                              {attendanceFilter === 'absent' 
+                                ? `No absent students found${gradeFilter ? ` in Grade ${gradeFilter}` : ''}`
+                                : (statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
+                                   `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`
+                                  )
+                              }
                             </p>
                             <p className="text-sm mt-1">
                               {dateRange.from === dateRange.to ? 
@@ -2499,7 +2674,7 @@ function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user }) {
         {/* Summary info */}
         {filteredData && filteredData.length > 0 && (
           <div className="mt-4 text-sm text-gray-600 text-center">
-            Showing {Math.min(50, filteredData.length)} of {filteredData.length} records
+            Showing {Math.min(50, filteredData.length)} of {filteredData.length} {attendanceFilter} records
             {(statusFilter !== 'all' || gradeFilter) && (
               <span className="block mt-1 text-xs">
                 Filtered by: {statusFilter !== 'all' && statusFilter.replace('-', ' ')}{statusFilter !== 'all' && gradeFilter && ' and '}{gradeFilter && `Grade ${gradeFilter}`}
@@ -3460,7 +3635,13 @@ function AnalyticsTab({ companyId }) {
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/analytics?type=${activeView}&company_id=${companyId}`)
+      const params = new URLSearchParams({ type: activeView })
+      
+      if (companyId && companyId !== 'undefined') {
+        params.set('company_id', companyId)
+      }
+      
+      const response = await fetch(`/api/analytics?${params}`)
       const data = await response.json()
       setAnalyticsData(data)
     } catch (error) {
@@ -3621,3 +3802,451 @@ function AnalyticsTab({ companyId }) {
     </div>
   )
 }
+
+function DatabaseHealthMonitor() {
+  const [healthData, setHealthData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [activeView, setActiveView] = useState('overview')
+
+  const fetchHealthData = async (action = '') => {
+    try {
+      setLoading(true)
+      const url = action ? `/api/health?action=${action}` : '/api/health'
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      setHealthData(data)
+      setError('')
+      setLastUpdated(new Date())
+    } catch (error) {
+      console.error('Health check failed:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const runManualCleanup = async () => {
+    try {
+      setCleanupLoading(true)
+      
+      const maintenanceKey = prompt('Enter maintenance key for cleanup:')
+      if (!maintenanceKey) return
+
+      const response = await fetch('/api/health?action=cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth_key: maintenanceKey })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert('Cleanup completed successfully!')
+        fetchHealthData(activeView === 'detailed' ? 'database' : '')
+      } else {
+        alert('Cleanup failed: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Cleanup failed:', error)
+      alert('Cleanup failed: ' + error.message)
+    } finally {
+      setCleanupLoading(false)
+    }
+  }
+
+  const fetchSessionDetails = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/health?action=monitor')
+      const data = await response.json()
+      
+      setHealthData(data)
+      setError('')
+      setLastUpdated(new Date())
+    } catch (error) {
+      console.error('Session monitoring failed:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const loadData = () => {
+      switch (activeView) {
+        case 'detailed':
+          fetchHealthData('database')
+          break
+        case 'sessions':
+          fetchSessionDetails()
+          break
+        default:
+          fetchHealthData('')
+      }
+    }
+
+    loadData()
+    
+    const interval = setInterval(loadData, 30000)
+    return () => clearInterval(interval)
+  }, [activeView])
+
+  const getHealthColor = (score) => {
+    if (score >= 90) return 'text-green-600 bg-green-100'
+    if (score >= 70) return 'text-yellow-600 bg-yellow-100'
+    if (score >= 50) return 'text-orange-600 bg-orange-100'
+    return 'text-red-600 bg-red-100'
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'healthy': return 'text-green-600 bg-green-100'
+      case 'degraded': return 'text-yellow-600 bg-yellow-100'
+      case 'critical': return 'text-red-600 bg-red-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  if (loading && !healthData) {
+    return (
+      <div className="bg-white p-4 rounded-lg shadow">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Checking system health...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !healthData) {
+    return (
+      <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-medium text-red-800">Health Check Failed</h4>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+          <button 
+            onClick={() => fetchHealthData('')}
+            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!healthData) return null
+
+  return (
+    <div className="space-y-4">
+      {/* View Selector */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Database Health Monitor</h3>
+          <div className="flex items-center space-x-2">
+            <div className="flex rounded-md shadow-sm">
+              <button
+                onClick={() => setActiveView('overview')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'overview'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } rounded-l-md`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveView('detailed')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'detailed'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } -ml-px`}
+              >
+                Detailed
+              </button>
+              <button
+                onClick={() => setActiveView('sessions')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'sessions'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } -ml-px rounded-r-md`}
+              >
+                Sessions
+              </button>
+            </div>
+            <button 
+              onClick={() => fetchHealthData(activeView === 'detailed' ? 'database' : activeView === 'sessions' ? 'monitor' : '')}
+              disabled={loading}
+              className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loading ? 'Checking...' : 'Refresh'}
+            </button>
+            <button
+              onClick={runManualCleanup}
+              disabled={cleanupLoading}
+              className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+            >
+              {cleanupLoading ? 'Cleaning...' : 'Cleanup'}
+            </button>
+          </div>
+        </div>
+
+        {lastUpdated && (
+          <div className="text-xs text-gray-500 text-center">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
+        )}
+      </div>
+
+      {/* Health Status Overview */}
+      {(activeView === 'overview' || activeView === 'detailed') && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">System Status</h4>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${getHealthColor(healthData.health_score || 0)} px-4 py-2 rounded-lg`}>
+                {healthData.health_score || 0}%
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Health Score</div>
+            </div>
+            
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {healthData.performance?.response_time_ms || 'N/A'}ms
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Response Time</div>
+            </div>
+            
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${
+                healthData.database?.status === 'connected' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {healthData.database?.status === 'connected' ? '✓' : '✗'}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">DB Connection</div>
+            </div>
+            
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${
+                (healthData.connection_pool?.available || healthData.pool_status?.available || 0) > 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {healthData.connection_pool?.available || healthData.pool_status?.available || 0}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Available Connections</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connection Pool Details */}
+      {(activeView === 'overview' || activeView === 'detailed') && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Connection Pool Status</h4>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {['size', 'available', 'pending', 'keepAlive', 'healthCheck'].map((metric) => {
+              const poolData = healthData.connection_pool || healthData.pool_status || {}
+              let value = poolData[metric] || 0
+              let displayValue = value
+              
+              if (metric === 'keepAlive' || metric === 'healthCheck') {
+                displayValue = value ? '✓' : '✗'
+              }
+              
+              return (
+                <div key={metric}>
+                  <div className={`text-lg font-bold ${
+                    metric === 'available' ? (value > 0 ? 'text-green-600' : 'text-red-600') :
+                    metric === 'keepAlive' || metric === 'healthCheck' ? (value ? 'text-green-600' : 'text-red-600') :
+                    'text-gray-900'
+                  }`}>
+                    {displayValue}
+                  </div>
+                  <div className="text-xs text-gray-600 capitalize">{metric.replace(/([A-Z])/g, ' $1')}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Database Connection Statistics */}
+      {activeView === 'detailed' && healthData.database_connections && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Database Connection Statistics</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-lg font-bold text-gray-900">
+                {healthData.database_connections.total_user_connections || 0}
+              </div>
+              <div className="text-xs text-gray-600">Total Connections</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-lg font-bold text-blue-600">
+                {healthData.database_connections.node_connections || 0}
+              </div>
+              <div className="text-xs text-gray-600">Node.js Connections</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className={`text-lg font-bold ${
+                (healthData.database_connections.idle_15min || 0) > 5 ? 'text-yellow-600' : 'text-green-600'
+              }`}>
+                {healthData.database_connections.idle_15min || 0}
+              </div>
+              <div className="text-xs text-gray-600">Idle 15+ min</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className={`text-lg font-bold ${
+                (healthData.database_connections.idle_30min || 0) > 0 ? 'text-red-600' : 'text-green-600'
+              }`}>
+                {healthData.database_connections.idle_30min || 0}
+              </div>
+              <div className="text-xs text-gray-600">Idle 30+ min</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Sessions */}
+      {activeView === 'sessions' && healthData.active_sessions && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Active Database Sessions</h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Login</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Idle Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {healthData.active_sessions.slice(0, 10).map((session) => (
+                  <tr key={session.session_id} className={session.idle_minutes > 30 ? 'bg-red-50' : session.idle_minutes > 15 ? 'bg-yellow-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {session.session_id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.login_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.program_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className={
+                        session.idle_minutes > 30 ? 'text-red-600 font-bold' :
+                        session.idle_minutes > 15 ? 'text-yellow-600 font-bold' :
+                        'text-green-600'
+                      }>
+                        {session.idle_minutes} min
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.status}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {healthData.active_sessions.length > 10 && (
+            <p className="text-sm text-gray-500 mt-2">
+              Showing 10 of {healthData.active_sessions.length} sessions
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Alerts */}
+      {healthData.alerts && healthData.alerts.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">System Alerts</h4>
+          <div className="space-y-2">
+            {healthData.alerts.map((alert, index) => (
+              <div key={index} className={`p-3 rounded-lg text-sm ${
+                alert.level === 'critical' ? 'bg-red-50 text-red-800' : 'bg-yellow-50 text-yellow-800'
+              }`}>
+                <span className="font-medium">{alert.level.toUpperCase()}:</span> {alert.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {healthData.recommendations && healthData.recommendations.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Recommendations</h4>
+          <div className="space-y-2">
+            {healthData.recommendations.map((recommendation, index) => (
+              <div key={index} className={`p-3 rounded-lg text-sm ${
+                recommendation.includes('optimal') ? 'bg-green-50 text-green-800' :
+                recommendation.includes('restart') || recommendation.includes('critical') ? 'bg-red-50 text-red-800' :
+                'bg-blue-50 text-blue-800'
+              }`}>
+                {recommendation}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Performance Metrics */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h4 className="font-medium text-gray-900 mb-3">Performance Metrics</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Response Time</div>
+            <div className="text-lg font-bold text-gray-900">
+              {healthData.performance?.response_time_ms || 'N/A'}ms
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Query Timeouts</div>
+            <div className={`text-lg font-bold ${
+              (healthData.performance?.query_timeouts || 0) > 0 ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {healthData.performance?.query_timeouts || 0}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Failed Checks</div>
+            <div className={`text-lg font-bold ${
+              (healthData.performance?.failed_checks || 0) > 0 ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {healthData.performance?.failed_checks || 0}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Errors */}
+      {healthData.detailed_errors && healthData.detailed_errors.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-red-900 mb-3">System Errors</h4>
+          <div className="space-y-2">
+            {healthData.detailed_errors.map((error, index) => (
+              <div key={index} className="bg-red-50 p-3 rounded-lg">
+                <div className="text-sm font-medium text-red-800">
+                  Check #{error.check_index + 1}
+                </div>
+                <div className="text-sm text-red-600">{error.error}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export { DatabaseHealthMonitor }
