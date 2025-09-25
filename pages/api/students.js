@@ -1279,9 +1279,89 @@ async function handlePut(req, res) {
   })
 }
 
+// async function handleDelete(req, res) {
+//   const { student_id } = req.query
+//   const { force_delete } = req.body // Allow force delete via body
+  
+//   if (!student_id) {
+//     return res.status(400).json({ 
+//       success: false,
+//       error: 'Student ID is required' 
+//     })
+//   }
+
+//   const pool = await getPool()
+  
+//   // Check if student exists and get related data count
+//   const studentCheck = await pool.request()
+//     .input('studentId', sql.Int, parseInt(student_id))
+//     .query(`
+//       SELECT 
+//         st.StudentID, 
+//         st.Name,
+//         (SELECT COUNT(*) FROM dbo.Attendance a WHERE a.StudentID = st.StudentID) as AttendanceCount
+//       FROM Students st 
+//       WHERE st.StudentID = @studentId
+//     `)
+    
+//   if (studentCheck.recordset.length === 0) {
+//     return res.status(404).json({ 
+//       success: false,
+//       error: 'Student not found' 
+//     })
+//   }
+
+//   const student = studentCheck.recordset[0]
+  
+//   // Soft delete if there are attendance records (unless force delete)
+//   if (student.AttendanceCount > 0 && !force_delete) {
+//     const result = await pool.request()
+//       .input('studentId', sql.Int, parseInt(student_id))
+//       .query(`
+//         UPDATE Students 
+//         SET IsActive = 0
+//         OUTPUT INSERTED.*
+//         WHERE StudentID = @studentId
+//       `)
+
+//     return res.json({
+//       success: true,
+//       message: `Student "${student.Name}" deactivated (has ${student.AttendanceCount} attendance records)`,
+//       action: 'soft_delete',
+//       note: 'Use force_delete: true to permanently delete',
+//       data: {
+//         student_id: parseInt(student_id),
+//         name: student.Name,
+//         is_active: false,
+//         attendance_count: student.AttendanceCount
+//       },
+//       timestamp: new Date().toISOString()
+//     })
+//   }
+
+//   // Hard delete
+//   if (force_delete && student.AttendanceCount > 0) {
+//     // Delete attendance records first
+//     await pool.request()
+//       .input('studentId', sql.Int, parseInt(student_id))
+//       .query('DELETE FROM dbo.Attendance WHERE StudentID = @studentId')
+//   }
+
+//   await pool.request()
+//     .input('studentId', sql.Int, parseInt(student_id))
+//     .query('DELETE FROM Students WHERE StudentID = @studentId')
+
+//   res.json({
+//     success: true,
+//     message: `Student "${student.Name}" deleted permanently`,
+//     action: 'hard_delete',
+//     attendance_records_deleted: student.AttendanceCount,
+//     timestamp: new Date().toISOString()
+//   })
+// }
 async function handleDelete(req, res) {
   const { student_id } = req.query
-  const { force_delete } = req.body // Allow force delete via body
+  const { force_delete } = req.body
   
   if (!student_id) {
     return res.status(400).json({ 
@@ -1299,7 +1379,8 @@ async function handleDelete(req, res) {
       SELECT 
         st.StudentID, 
         st.Name,
-        (SELECT COUNT(*) FROM dbo.Attendance a WHERE a.StudentID = st.StudentID) as AttendanceCount
+        (SELECT COUNT(*) FROM dbo.Attendance a WHERE a.StudentID = st.StudentID) as AttendanceCount,
+        (SELECT COUNT(*) FROM dbo.Parents p WHERE p.StudentID = st.StudentID) as ParentCount
       FROM Students st 
       WHERE st.StudentID = @studentId
     `)
@@ -1313,8 +1394,13 @@ async function handleDelete(req, res) {
 
   const student = studentCheck.recordset[0]
   
-  // Soft delete if there are attendance records (unless force delete)
-  if (student.AttendanceCount > 0 && !force_delete) {
+  // Check what related data exists
+  const hasAttendance = student.AttendanceCount > 0
+  const hasParents = student.ParentCount > 0
+  const hasRelatedData = hasAttendance || hasParents
+  
+  // Soft delete if there are related records (unless force delete)
+  if (hasRelatedData && !force_delete) {
     const result = await pool.request()
       .input('studentId', sql.Int, parseInt(student_id))
       .query(`
@@ -1326,37 +1412,89 @@ async function handleDelete(req, res) {
 
     return res.json({
       success: true,
-      message: `Student "${student.Name}" deactivated (has ${student.AttendanceCount} attendance records)`,
+      message: `Student "${student.Name}" deactivated (has ${student.AttendanceCount} attendance records and ${student.ParentCount} parent records)`,
       action: 'soft_delete',
-      note: 'Use force_delete: true to permanently delete',
+      note: 'Use force_delete: true to permanently delete all related data',
       data: {
         student_id: parseInt(student_id),
         name: student.Name,
         is_active: false,
-        attendance_count: student.AttendanceCount
+        attendance_count: student.AttendanceCount,
+        parent_count: student.ParentCount
       },
       timestamp: new Date().toISOString()
     })
   }
 
-  // Hard delete
-  if (force_delete && student.AttendanceCount > 0) {
-    // Delete attendance records first
-    await pool.request()
-      .input('studentId', sql.Int, parseInt(student_id))
-      .query('DELETE FROM dbo.Attendance WHERE StudentID = @studentId')
+  // Hard delete - need to delete related records first
+  if (force_delete) {
+    try {
+      // Start transaction
+      const transaction = new sql.Transaction(pool)
+      await transaction.begin()
+      
+      try {
+        // Delete in correct order to avoid foreign key conflicts
+        
+        // 1. Delete attendance records first
+        if (hasAttendance) {
+          await transaction.request()
+            .input('studentId', sql.Int, parseInt(student_id))
+            .query('DELETE FROM dbo.Attendance WHERE StudentID = @studentId')
+        }
+
+        // 2. Delete parent records
+        if (hasParents) {
+          await transaction.request()
+            .input('studentId', sql.Int, parseInt(student_id))
+            .query('DELETE FROM dbo.Parents WHERE StudentID = @studentId')
+        }
+
+        // 3. Finally delete the student
+        await transaction.request()
+          .input('studentId', sql.Int, parseInt(student_id))
+          .query('DELETE FROM Students WHERE StudentID = @studentId')
+
+        // Commit transaction
+        await transaction.commit()
+
+        return res.json({
+          success: true,
+          message: `Student "${student.Name}" and all related data deleted permanently`,
+          action: 'hard_delete',
+          deleted_records: {
+            attendance_records: student.AttendanceCount,
+            parent_records: student.ParentCount,
+            student: 1
+          },
+          timestamp: new Date().toISOString()
+        })
+
+      } catch (error) {
+        // Rollback transaction on error
+        await transaction.rollback()
+        throw error
+      }
+      
+    } catch (error) {
+      console.error('Force delete error:', error)
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete student and related data: ' + error.message,
+        timestamp: new Date().toISOString()
+      })
+    }
   }
 
+  // Simple delete for students with no related data
   await pool.request()
     .input('studentId', sql.Int, parseInt(student_id))
     .query('DELETE FROM Students WHERE StudentID = @studentId')
 
   res.json({
     success: true,
-    message: `Student "${student.Name}" deleted permanently`,
-    action: 'hard_delete',
-    attendance_records_deleted: student.AttendanceCount,
+    message: `Student "${student.Name}" deleted successfully`,
+    action: 'simple_delete',
     timestamp: new Date().toISOString()
   })
 }
-

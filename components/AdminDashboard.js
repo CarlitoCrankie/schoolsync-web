@@ -2752,26 +2752,75 @@ function StudentsTab({ onRefresh, user }) {
                 <p className="text-gray-700 mb-4">
                   Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
                 </p>
-                <div className="flex justify-end space-x-3">
+                
+                {/* Information about potential data loss */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-yellow-800">
+                        This student may have related data
+                      </h3>
+                      <div className="mt-2 text-sm text-yellow-700">
+                        <p>This student might have attendance records, parent accounts, or other related data that will affect the deletion process.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Option 1: Deactivate (Recommended) */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">Recommended: Deactivate Student</h4>
+                    <p className="text-sm text-blue-700 mb-3">
+                      Marks the student as inactive but keeps all attendance records and related data. 
+                      The student won't appear in active lists but data is preserved for reports.
+                    </p>
+                    <button
+                      onClick={() => handleDelete(false)}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                      disabled={loading}
+                    >
+                      {loading ? 'Processing...' : 'Deactivate Student (Recommended)'}
+                    </button>
+                  </div>
+
+                  {/* Option 2: Force Delete (Dangerous) */}
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                    <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ Permanent Deletion</h4>
+                    <p className="text-sm text-red-700 mb-3">
+                      <strong>Warning:</strong> This will permanently delete the student AND all related data including:
+                    </p>
+                    <ul className="text-sm text-red-700 mb-3 ml-4 list-disc">
+                      <li>All attendance records</li>
+                      <li>Parent accounts and logins</li>
+                      <li>Historical data for reports</li>
+                    </ul>
+                    <p className="text-xs text-red-600 mb-3">
+                      <strong>This action cannot be undone!</strong>
+                    </p>
+                    <button
+                      onClick={() => handleDelete(true)}
+                      className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+                      disabled={loading}
+                    >
+                      {loading ? 'Processing...' : 'Permanently Delete All Data'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cancel button */}
+                <div className="mt-4 pt-3 border-t border-gray-200">
                   <button
                     onClick={closeModal}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                    className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                    disabled={loading}
                   >
                     Cancel
-                  </button>
-                  <button
-                    onClick={() => handleDelete(false)}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
-                    disabled={loading}
-                  >
-                    {loading ? 'Processing...' : 'Deactivate'}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(true)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                    disabled={loading}
-                  >
-                    {loading ? 'Processing...' : 'Force Delete'}
                   </button>
                 </div>
               </div>
