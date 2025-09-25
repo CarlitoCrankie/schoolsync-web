@@ -86,7 +86,7 @@
 require('dotenv').config()
 
 // scripts/database-maintenance.js - CRITICAL: Database maintenance and monitoring script
-const { executeQuery, getPoolStatus, monitorConnectionHealth, cleanupIdleConnections } = require('../lib/database')
+const { executeQuery, getPoolStatus, monitorConnectionHealth, cleanupIdleConnections } = require('../../lib/database')
 
 const MAINTENANCE_KEY = process.env.MAINTENANCE_KEY
 
