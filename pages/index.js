@@ -4,6 +4,9 @@ import LoginScreen from '../components/LoginScreen'
 import ParentDashboard from '../components/ParentDashboard'
 import AdminDashboard from '../components/AdminDashboard'
 import Header from '../components/Header'
+require('dotenv').config();
+console.log("DEBUG DB_PORT:", process.env.DB_PORT);
+
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState(null)
