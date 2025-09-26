@@ -1068,12 +1068,12 @@ async function getOverviewAnalytics(schoolId, companyId) {
       INNER JOIN Students st ON a.StudentID = st.StudentID
       INNER JOIN Schools s ON st.SchoolID = s.SchoolID
       WHERE CAST(a.ScanTime as DATE) = CAST(GETDATE() as DATE)
-      AND a.Status = 'IN'
+      AND a.Status IN ('IN', 'OUT')
       AND st.IsActive = 1
       ${schoolFilter}
       OPTION (MAXDOP 1)
     `, params, 30000);
-    
+
     // Attendance record counts
     const attendanceCountsResult = await executeQuery(`
       SELECT 
