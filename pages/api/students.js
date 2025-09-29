@@ -1101,6 +1101,134 @@ async function handlePost(req, res) {
 async function handleAction(req, res) {
   const { action } = req.body
 
+  if (action === 'search_student_attendance') {
+    const { query, date_from, date_to, school_id } = req.body
+    
+    if (!query || !date_from || !date_to) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query, date_from, and date_to are required for search_student_attendance action'
+      })
+    }
+
+    try {
+      const pool = await getPool()
+      
+      // Search for student by name or student code
+      let studentQuery = `
+        SELECT TOP 1 StudentID, Name, Grade, StudentCode, SchoolID, 
+               (SELECT Name FROM Schools WHERE SchoolID = st.SchoolID) as SchoolName
+        FROM Students st
+        WHERE (st.Name LIKE @query OR st.StudentCode LIKE @query)
+        AND st.IsActive = 1
+      `
+      
+      // Add school filter for non-company admins
+      if (school_id) {
+        studentQuery += ` AND st.SchoolID = @schoolId`
+      }
+      
+      studentQuery += ` ORDER BY 
+        CASE 
+          WHEN st.Name = @exactQuery THEN 1 
+          WHEN st.StudentCode = @exactQuery THEN 2
+          WHEN st.Name LIKE @exactQuery + '%' THEN 3
+          WHEN st.StudentCode LIKE @exactQuery + '%' THEN 4
+          ELSE 5 
+        END`
+
+      const request = pool.request()
+      request.input('query', sql.NVarChar, `%${query}%`)
+      request.input('exactQuery', sql.NVarChar, query)
+      if (school_id) {
+        request.input('schoolId', sql.Int, parseInt(school_id))
+      }
+      
+      const studentResult = await request.query(studentQuery)
+      
+      if (studentResult.recordset.length === 0) {
+        return res.json({
+          success: false,
+          error: 'Student not found'
+        })
+      }
+      
+      const student = studentResult.recordset[0]
+      
+      // Get attendance records for date range
+      const attendanceQuery = `
+        SELECT 
+          a.AttendanceID as id,
+          a.ScanTime as scan_time,
+          a.Status as status,
+          a.CreatedAt,
+          -- Add status calculations if you have time settings
+          CASE 
+            WHEN a.Status = 'IN' THEN 'Check In'
+            WHEN a.Status = 'OUT' THEN 'Check Out'
+            ELSE a.Status
+          END as statusLabel,
+          '' as message
+        FROM Attendance a
+        WHERE a.StudentID = @studentId
+        AND CAST(a.ScanTime as DATE) BETWEEN @dateFrom AND @dateTo
+        ORDER BY a.ScanTime DESC
+      `
+      
+      const attendanceRequest = pool.request()
+      attendanceRequest.input('studentId', sql.Int, student.StudentID)
+      attendanceRequest.input('dateFrom', sql.Date, new Date(date_from))
+      attendanceRequest.input('dateTo', sql.Date, new Date(date_to))
+      
+      const attendanceResult = await attendanceRequest.query(attendanceQuery)
+      
+      // Calculate summary statistics
+      const records = attendanceResult.recordset
+      const dateFrom = new Date(date_from)
+      const dateTo = new Date(date_to)
+      const totalDays = Math.ceil((dateTo - dateFrom) / (1000 * 60 * 60 * 24)) + 1
+      
+      // Get unique days with attendance
+      const attendanceDays = new Set(
+        records.map(r => new Date(r.scan_time).toDateString())
+      )
+      
+      const presentDays = attendanceDays.size
+      const absentDays = Math.max(0, totalDays - presentDays)
+      const lateArrivals = records.filter(r => 
+        r.status === 'IN' && r.statusType === 'late'
+      ).length
+      
+      const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0
+      
+      return res.json({
+        success: true,
+        data: {
+          student: {
+            name: student.Name,
+            student_code: student.StudentCode,
+            grade: student.Grade,
+            school_name: student.SchoolName
+          },
+          summary: {
+            present_days: presentDays,
+            absent_days: absentDays,
+            late_arrivals: lateArrivals,
+            attendance_rate: attendanceRate
+          },
+          records: records
+        }
+      })
+      
+    } catch (error) {
+      console.error('Error in search_student_attendance:', error)
+      return res.json({ 
+        success: false, 
+        error: error.message 
+      })
+    }
+  }
+
   if (action === 'get_absent_students') {
     const { school_id, date } = req.body
     
