@@ -1,0 +1,6442 @@
+import { useState, useEffect, useRef } from 'react'
+import { 
+  getStatusBadgeClasses, 
+  getStatusIcon, 
+  formatTime, 
+  formatDate,
+  enhanceAttendanceWithTimeSettings 
+} from '../../../lib/attendanceUtils'
+
+export default function AdminDashboard({ user, onLogout }) {
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [stats, setStats] = useState({})
+  const [students, setStudents] = useState([])
+  const [schools, setSchools] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [schoolTimeSettings, setSchoolTimeSettings] = useState(null)
+  
+  // Timeout and activity tracking
+  const timeoutRef = useRef(null)
+  const TIMEOUT_DURATION = 30 * 60 * 1000 // 5 minutes in milliseconds
+  
+  // Activity handlers
+    const resetTimeout = () => {
+    console.log('Activity detected, resetting timeout') // Add this line
+    if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+        console.log('TIMEOUT TRIGGERED!')
+        alert('Session expired due to inactivity. You will be logged out.')
+        if (typeof onLogout === 'function') {
+            onLogout()
+        } else {
+            // Fallback if onLogout is not available
+            localStorage.removeItem('token')
+            localStorage.removeItem('userInfo')
+            window.location.replace('/')
+        }
+    }, TIMEOUT_DURATION)
+        }
+
+    useEffect(() => {
+        console.log('Setting up timeout listeners') // Debug log
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
+        
+        const handleActivity = () => {
+        console.log('Activity detected') // Debug log
+        resetTimeout()
+        }
+
+        // Remove the onLogout check - set up timeout regardless
+        events.forEach(event => {
+        document.addEventListener(event, handleActivity, true)
+        })
+
+        resetTimeout() // Start the timer immediately
+        console.log('Timeout started') // Debug log
+
+        return () => {
+        console.log('Cleaning up timeout') // Debug log
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+        }
+        events.forEach(event => {
+            document.removeEventListener(event, handleActivity, true)
+        })
+        }
+    }, []) // Remove onLogout dependency
+
+  // FIXED: Better user validation and role determination
+  const isCompanyAdmin = user?.role === 'company_admin' || user?.role === 'main_admin'
+  const isSchoolAdmin = user?.role === 'school_admin' || user?.SchoolID || user?.school_id
+
+  // FIXED: Only load data if we have a valid user
+  useEffect(() => {
+    console.log('=== DASHBOARD USEEFFECT TRIGGERED ===')
+    console.log('User object:', user)
+    console.log('User role:', user?.role)
+    console.log('User SchoolID:', user?.SchoolID)
+    console.log('User school_id:', user?.school_id)
+    console.log('Is company admin:', isCompanyAdmin)
+    console.log('Is school admin:', isSchoolAdmin)
+
+    if (!user) {
+      console.log('No user object - skipping data load')
+      setError('User information not available')
+      setLoading(false)
+      return
+    }
+
+    if (!isCompanyAdmin && !user.SchoolID && !user.school_id) {
+      console.log('School admin without school ID - skipping data load')
+      setError('School ID not found in user data')
+      setLoading(false)
+      return
+    }
+
+    console.log('Starting dashboard data load...')
+    loadDashboardData()
+  }, [user])
+
+  const availableTabs = isCompanyAdmin ? [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'attendance', label: 'Network', icon: '👥' },
+    { id: 'schools', label: 'Schools', icon: '🏫' },
+    { id: 'system-monitor', label: 'Monitor', icon: '⚡' },
+    { id: 'health-monitor', label: 'DB Health', icon: '🔍' }, 
+    { id: 'analytics', label: 'Analytics', icon: '📈' }
+  ] : [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'students', label: 'Students', icon: '👨‍🎓' },
+    { id: 'upload', label: 'Upload', icon: '📤' },
+    { id: 'attendance', label: 'Attendance', icon: '✅' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' }
+  ]
+  
+  const loadDashboardData = async () => {
+    console.log('=== LOAD DASHBOARD DATA FUNCTION CALLED ===')
+    setLoading(true)
+    setError('')
+    
+    try {
+      if (isCompanyAdmin) {
+        console.log('Loading company admin data...')
+        await loadCompanyAdminData()
+      } else {
+        console.log('Loading school admin data...')
+        await loadSchoolAdminData()
+      }
+    } catch (error) {
+      console.error('Dashboard loading error:', error)
+      setError('Failed to load dashboard data: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadCompanyAdminData = async () => {
+    try {
+      const [overviewResponse, schoolsResponse, attendanceResponse, syncResponse] = await Promise.all([
+        fetch(`/api/analytics?type=overview`),
+        fetch(`/api/analytics?type=schools`),
+        fetch(`/api/analytics?type=real-time`),
+        fetch(`/api/analytics?type=sync-performance`)
+      ])
+
+      const overviewData = await overviewResponse.json()
+      const schoolsData = await schoolsResponse.json()
+      const attendanceData = await attendanceResponse.json()
+      const syncData = await syncResponse.json()
+
+      if (overviewData.success && overviewData.overview) {
+        const syncAgents = syncData.success ? syncData.performance_metrics : null
+        const systemHealth = determineSystemHealth(overviewData.overview, syncAgents)
+        
+        setStats({
+          total_schools: overviewData.overview.schools?.total || 0,
+          total_students: overviewData.overview.students?.total || 0,
+          active_sync_agents: syncAgents?.online_agents || 0,
+          total_sync_agents: syncAgents?.total_agents || 0,
+          system_health: systemHealth,
+          total_attendance_today: overviewData.overview.attendance?.today || 0,
+          sync_health_score: syncAgents?.avg_health_score || 0
+        })
+      } else {
+        setStats({
+          total_schools: 0,
+          total_students: 0,
+          active_sync_agents: 0,
+          total_sync_agents: 0,
+          system_health: 'error',
+          total_attendance_today: 0,
+          sync_health_score: 0
+        })
+      }
+
+      if (schoolsData.success && schoolsData.schools) {
+        setSchools(schoolsData.schools.map(school => ({
+          id: school.SchoolID || school.school_id,
+          name: school.name,
+          location: school.location,
+          status: school.status,
+          students: school.students?.total || 0,
+          syncStatus: school.sync_agent?.connection_status?.toLowerCase() || 'offline'
+        })))
+      }
+
+      if (attendanceData.success && attendanceData.current_activity) {
+        setAttendance(attendanceData.current_activity.map(record => ({
+          id: record.attendance_id,
+          student_name: record.student_name,
+          scan_time: record.scan_time,
+          status: record.status,
+          created_at: record.created_at,
+          school_name: record.school_name
+        })))
+      } else {
+        setAttendance([])
+      }
+
+    } catch (error) {
+      console.error('Error loading company admin data:', error)
+      setStats({
+        total_schools: 0,
+        total_students: 0,
+        active_sync_agents: 0,
+        total_sync_agents: 0,
+        system_health: 'error',
+        total_attendance_today: 0,
+        sync_health_score: 0
+      })
+      setSchools([])
+      setAttendance([])
+    }
+  }
+
+  // const loadSchoolAdminData = async () => {
+  //   console.log('=== LOADING SCHOOL ADMIN DATA ===')
+    
+  //   try {
+  //     const schoolId = user?.SchoolID || user?.school_id
+      
+  //     if (!schoolId) {
+  //       console.error('No school ID found for school admin')
+  //       throw new Error('School ID not found in user data')
+  //     }
+
+  //     console.log('Using school ID:', schoolId)
+
+  //     const apiCalls = []
+
+  //     // Overview/stats API call
+  //     apiCalls.push(
+  //       fetch(`/api/analytics?type=overview&school_id=${schoolId}`)
+  //         .then(response => {
+  //           console.log('Overview API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Overview API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Overview API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //     // Students API call
+  //     apiCalls.push(
+  //       fetch(`/api/students?school_id=${schoolId}&include_stats=true`)
+  //         .then(response => {
+  //           console.log('Students API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Students API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Students API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //     // Attendance API call
+  //     apiCalls.push(
+  //       fetch(`/api/analytics?type=real-time&school_id=${schoolId}`)
+  //         .then(response => {
+  //           console.log('Attendance API response status:', response.status)
+  //           if (!response.ok) {
+  //             throw new Error(`Attendance API failed: ${response.status}`)
+  //           }
+  //           return response.json()
+  //         })
+  //         .catch(error => {
+  //           console.warn('Attendance API failed:', error)
+  //           return { success: false, error: error.message }
+  //         })
+  //     )
+
+  //   // Sync status API call - check school-specific sync agent
+  //   apiCalls.push(
+  //   fetch('/api/sync-agent', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ 
+  //       action: 'get_status', 
+  //       school_id: schoolId 
+  //       })
+  //   })
+  //       .then(response => {
+  //       console.log('Sync API response status:', response.status)
+  //       if (!response.ok) {
+  //           throw new Error(`Sync API failed: ${response.status}`)
+  //       }
+  //       return response.json()
+  //       })
+  //       .catch(error => {
+  //       console.warn('Sync API failed:', error)
+  //       return { success: false, error: error.message }
+  //       })
+  //   )
+
+  //   // Also try to get sync performance data for this school
+  //   apiCalls.push(
+  //   fetch(`/api/analytics?type=sync-performance&school_id=${schoolId}`)
+  //       .then(response => {
+  //       console.log('Sync Performance API response status:', response.status)
+  //       if (!response.ok) {
+  //           throw new Error(`Sync Performance API failed: ${response.status}`)
+  //       }
+  //       return response.json()
+  //       })
+  //       .catch(error => {
+  //       console.warn('Sync Performance API failed:', error)
+  //       return { success: false, error: error.message }
+  //       })
+  //   )
+
+  //     console.log('Making parallel API calls...')
+  //     const [overviewData, studentsData, attendanceData, syncStatus, syncPerformance] = await Promise.all(apiCalls)
+
+  //     console.log('=== API RESPONSES ===')
+  //     console.log('Overview:', overviewData)
+  //     console.log('Students:', studentsData)
+  //     console.log('Attendance:', attendanceData)
+  //     console.log('Sync Status:', syncStatus)
+  //     console.log('=== END API RESPONSES ===')
+
+  //       // FIXED: Better sync agent status detection for school admin
+  //   let syncAgentStatus = 'offline'
+
+  //   // Method 1: Check sync status response
+  //   if (syncStatus?.success) {
+  //   if (syncStatus.school_id && syncStatus.school_id == schoolId) {
+  //       syncAgentStatus = syncStatus.status || 'online'
+  //       console.log('Sync status from get_status:', syncAgentStatus)
+  //   } else if (syncStatus.result && syncStatus.result.school_id == schoolId) {
+  //       syncAgentStatus = 'online'
+  //       console.log('Sync status from ping result:', syncAgentStatus)
+  //   }
+  //   }
+
+  //   // Method 2: Check sync performance data
+  //   if (syncAgentStatus === 'offline' && syncPerformance?.success && syncPerformance.agents) {
+  //   const schoolAgent = syncPerformance.agents.find(agent => agent.school_id == schoolId)
+  //   if (schoolAgent) {
+  //       syncAgentStatus = schoolAgent.connection_status === 'Online' ? 'online' : 'offline'
+  //       console.log('Sync status from performance data:', syncAgentStatus)
+  //   }
+  //   }
+
+  //   // Method 3: Check if sync agent database tables exist and have recent data
+  //   if (syncAgentStatus === 'offline') {
+  //   // Try to ping the sync agent directly for this school
+  //   try {
+  //       const pingResponse = await fetch('/api/sync-agent', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ 
+  //           action: 'ping_agent', 
+  //           school_id: schoolId 
+  //       })
+  //       })
+  //       const pingData = await pingResponse.json()
+  //       if (pingData.success && pingData.result?.status === 'online') {
+  //       syncAgentStatus = 'online'
+  //       console.log('Sync status from ping:', syncAgentStatus)
+  //       }
+  //   } catch (error) {
+  //       console.warn('Sync agent ping failed:', error)
+  //   }
+  //   }
+
+  //   console.log('Final sync agent status determined as:', syncAgentStatus)
+  //     console.log('Sync agent status determined as:', syncAgentStatus)
+
+  //     let totalStudents = 0
+  //     let presentToday = 0
+  //     let withoutPasswords = 0
+
+  //     // Process students data
+  //     if (studentsData?.success && Array.isArray(studentsData.data)) {
+  //       console.log('Processing students data - count:', studentsData.data.length)
+  //       totalStudents = studentsData.data.length
+  //       withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+
+  //       setStudents(studentsData.data.map(student => ({
+  //         id: student.student_id,
+  //         name: student.name,
+  //         grade: student.grade,
+  //         studentCode: student.student_code,
+  //         student_code: student.student_code,
+  //         parentPasswordSet: student.parent_password_set,
+  //         parent_password_set: student.parent_password_set,
+  //         lastSeen: student.attendance_stats?.last_attendance,
+  //         is_active: student.is_active !== false
+  //       })))
+  //     } else {
+  //       console.log('Using fallback student data')
+  //       const fallbackStudents = [
+  //         { id: 1, name: 'John Doe', grade: '10th', studentCode: '001', parentPasswordSet: true, lastSeen: '2024-12-19T08:15:00', is_active: true },
+  //         { id: 2, name: 'Jane Smith', grade: '9th', studentCode: '002', parentPasswordSet: false, lastSeen: null, is_active: true },
+  //       ]
+  //       setStudents(fallbackStudents)
+  //       totalStudents = fallbackStudents.length
+  //       withoutPasswords = fallbackStudents.filter(s => !s.parentPasswordSet).length
+  //     }
+
+  //     // Process attendance data
+  //     if (attendanceData?.success && Array.isArray(attendanceData.current_activity)) {
+  //       console.log('Processing attendance data - total records:', attendanceData.current_activity.length)
+        
+  //       // FIXED: Use the corrected attendance.today value from API
+  //       const todayPresentFromAPI = overviewData?.overview?.attendance?.today || 0
+        
+  //       console.log('Today present from API:', todayPresentFromAPI)
+  //       console.log('Debug info from API:', overviewData?.debug_info)
+        
+  //       // Use the API value instead of calculating from activity records
+  //       presentToday = todayPresentFromAPI
+        
+  //       const recentCheckIns = attendanceData.current_activity
+  //         .sort((a, b) => new Date(b.scan_time || b.created_at) - new Date(a.scan_time || a.created_at))
+  //         .slice(0, 10)
+
+  //       setAttendance(recentCheckIns.map(record => ({
+  //         id: record.attendance_id,
+  //         studentName: record.student_name,
+  //         status: record.status,
+  //         time: record.scan_time,
+  //         grade: 'N/A'
+  //       })))
+  //     } else {
+  //       console.log('No valid attendance data received')
+  //       setAttendance([])
+  //     }
+
+  //     const calculatedStats = {
+  //       total_students: totalStudents,
+  //       present_today: presentToday, // This should already be unique from your backend
+  //       absent_today: Math.max(0, totalStudents - presentToday),
+  //       students_without_passwords: withoutPasswords,
+  //       sync_status: syncAgentStatus,
+  //       attendance_rate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0
+  //     }
+
+  //     console.log('Setting calculated stats:', calculatedStats)
+  //     setStats(calculatedStats)
+
+  //     console.log('=== SCHOOL ADMIN DATA LOADING COMPLETE ===')
+
+  //   } catch (error) {
+  //     console.error('Error in loadSchoolAdminData:', error)
+  //     setError('Some data could not be loaded: ' + error.message)
+      
+  //     setStats({
+  //       total_students: 0,
+  //       present_today: 0,
+  //       absent_today: 0,
+  //       students_without_passwords: 0,
+  //       sync_status: 'offline'
+  //     })
+  //     setStudents([])
+  //     setAttendance([])
+  //   }
+  // }
+  const loadSchoolAdminData = async () => {
+    console.log('=== LOADING SCHOOL ADMIN DATA ===')
+    
+    try {
+      const schoolId = user?.SchoolID || user?.school_id
+      
+      if (!schoolId) {
+        console.error('No school ID found for school admin')
+        throw new Error('School ID not found in user data')
+      }
+
+      console.log('Using school ID:', schoolId)
+
+      const apiCalls = []
+
+      // Overview/stats API call
+      apiCalls.push(
+        fetch(`/api/analytics?type=overview&school_id=${schoolId}`)
+          .then(response => {
+            console.log('Overview API response status:', response.status)
+            if (!response.ok) {
+              throw new Error(`Overview API failed: ${response.status}`)
+            }
+            return response.json()
+          })
+          .catch(error => {
+            console.warn('Overview API failed:', error)
+            return { success: false, error: error.message }
+          })
+      )
+
+      // FIXED: Students API call - Remove limit to get all students for stats, or use high limit
+      apiCalls.push(
+        fetch(`/api/students?school_id=${schoolId}&include_stats=true&limit=999999`)
+          .then(response => {
+            console.log('Students API response status:', response.status)
+            if (!response.ok) {
+              throw new Error(`Students API failed: ${response.status}`)
+            }
+            return response.json()
+          })
+          .catch(error => {
+            console.warn('Students API failed:', error)
+            return { success: false, error: error.message }
+          })
+      )
+
+      // Attendance API call
+      apiCalls.push(
+        fetch(`/api/analytics?type=real-time&school_id=${schoolId}`)
+          .then(response => {
+            console.log('Attendance API response status:', response.status)
+            if (!response.ok) {
+              throw new Error(`Attendance API failed: ${response.status}`)
+            }
+            return response.json()
+          })
+          .catch(error => {
+            console.warn('Attendance API failed:', error)
+            return { success: false, error: error.message }
+          })
+      )
+
+      // Sync status API call - check school-specific sync agent
+      apiCalls.push(
+        fetch('/api/sync-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: 'get_status', 
+            school_id: schoolId 
+          })
+        })
+        .then(response => {
+          console.log('Sync API response status:', response.status)
+          if (!response.ok) {
+            throw new Error(`Sync API failed: ${response.status}`)
+          }
+          return response.json()
+        })
+        .catch(error => {
+          console.warn('Sync API failed:', error)
+          return { success: false, error: error.message }
+        })
+      )
+
+      // Also try to get sync performance data for this school
+      apiCalls.push(
+        fetch(`/api/analytics?type=sync-performance&school_id=${schoolId}`)
+          .then(response => {
+            console.log('Sync Performance API response status:', response.status)
+            if (!response.ok) {
+              throw new Error(`Sync Performance API failed: ${response.status}`)
+            }
+            return response.json()
+          })
+          .catch(error => {
+            console.warn('Sync Performance API failed:', error)
+            return { success: false, error: error.message }
+          })
+      )
+
+      console.log('Making parallel API calls...')
+      const [overviewData, studentsData, attendanceData, syncStatus, syncPerformance] = await Promise.all(apiCalls)
+
+      console.log('=== API RESPONSES ===')
+      console.log('Overview:', overviewData)
+      console.log('Students:', studentsData)
+      console.log('Attendance:', attendanceData)
+      console.log('Sync Status:', syncStatus)
+      console.log('=== END API RESPONSES ===')
+
+      // FIXED: Better sync agent status detection for school admin
+      let syncAgentStatus = 'offline'
+
+      // Method 1: Check sync status response
+      if (syncStatus?.success) {
+        if (syncStatus.school_id && syncStatus.school_id == schoolId) {
+          syncAgentStatus = syncStatus.status || 'online'
+          console.log('Sync status from get_status:', syncAgentStatus)
+        } else if (syncStatus.result && syncStatus.result.school_id == schoolId) {
+          syncAgentStatus = 'online'
+          console.log('Sync status from ping result:', syncAgentStatus)
+        }
+      }
+
+      // Method 2: Check sync performance data
+      if (syncAgentStatus === 'offline' && syncPerformance?.success && syncPerformance.agents) {
+        const schoolAgent = syncPerformance.agents.find(agent => agent.school_id == schoolId)
+        if (schoolAgent) {
+          syncAgentStatus = schoolAgent.connection_status === 'Online' ? 'online' : 'offline'
+          console.log('Sync status from performance data:', syncAgentStatus)
+        }
+      }
+
+      // Method 3: Check if sync agent database tables exist and have recent data
+      if (syncAgentStatus === 'offline') {
+        // Try to ping the sync agent directly for this school
+        try {
+          const pingResponse = await fetch('/api/sync-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              action: 'ping_agent', 
+              school_id: schoolId 
+            })
+          })
+          const pingData = await pingResponse.json()
+          if (pingData.success && pingData.result?.status === 'online') {
+            syncAgentStatus = 'online'
+            console.log('Sync status from ping:', syncAgentStatus)
+          }
+        } catch (error) {
+          console.warn('Sync agent ping failed:', error)
+        }
+      }
+
+      console.log('Final sync agent status determined as:', syncAgentStatus)
+
+      let totalStudents = 0
+      let presentToday = 0
+      let withoutPasswords = 0
+
+      // FIXED: Process students data with proper total counts
+      if (studentsData?.success) {
+        console.log('Processing students data...')
+        
+        // PRIORITY 1: Use the new totals object if available (from updated API)
+        if (studentsData.totals) {
+          console.log('Using totals from API:', studentsData.totals)
+          totalStudents = studentsData.totals.total_students
+          
+          // Process the paginated student data
+          if (Array.isArray(studentsData.data)) {
+            withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+            
+            setStudents(studentsData.data.map(student => ({
+              id: student.student_id,
+              name: student.name,
+              grade: student.grade,
+              studentCode: student.student_code,
+              student_code: student.student_code,
+              parentPasswordSet: student.parent_password_set,
+              parent_password_set: student.parent_password_set,
+              lastSeen: student.attendance_stats?.last_attendance,
+              is_active: student.is_active !== false
+            })))
+          }
+        }
+        // FALLBACK: Use the old method if totals not available
+        else if (Array.isArray(studentsData.data)) {
+          console.log('Using legacy method - students count:', studentsData.data.length)
+          totalStudents = studentsData.data.length
+          withoutPasswords = studentsData.data.filter(s => !s.parent_password_set).length
+
+          setStudents(studentsData.data.map(student => ({
+            id: student.student_id,
+            name: student.name,
+            grade: student.grade,
+            studentCode: student.student_code,
+            student_code: student.student_code,
+            parentPasswordSet: student.parent_password_set,
+            parent_password_set: student.parent_password_set,
+            lastSeen: student.attendance_stats?.last_attendance,
+            is_active: student.is_active !== false
+          })))
+        }
+        // COMPATIBILITY: Handle old API format
+        else if (Array.isArray(studentsData.students)) {
+          console.log('Using students array - count:', studentsData.students.length)
+          totalStudents = studentsData.total || studentsData.students.length
+          withoutPasswords = studentsData.students.filter(s => !s.parent_password_set).length
+
+          setStudents(studentsData.students.map(student => ({
+            id: student.student_id,
+            name: student.name,
+            grade: student.grade,
+            studentCode: student.student_code,
+            student_code: student.student_code,
+            parentPasswordSet: student.parent_password_set,
+            parent_password_set: student.parent_password_set,
+            lastSeen: student.attendance_stats?.last_attendance,
+            is_active: student.is_active !== false
+          })))
+        }
+      } else {
+        console.log('Using fallback student data')
+        const fallbackStudents = [
+          { id: 1, name: 'John Doe', grade: '10th', studentCode: '001', parentPasswordSet: true, lastSeen: '2024-12-19T08:15:00', is_active: true },
+          { id: 2, name: 'Jane Smith', grade: '9th', studentCode: '002', parentPasswordSet: false, lastSeen: null, is_active: true },
+        ]
+        setStudents(fallbackStudents)
+        totalStudents = fallbackStudents.length
+        withoutPasswords = fallbackStudents.filter(s => !s.parentPasswordSet).length
+      }
+
+      // Process attendance data
+      if (attendanceData?.success && Array.isArray(attendanceData.current_activity)) {
+        console.log('Processing attendance data - total records:', attendanceData.current_activity.length)
+        
+        // FIXED: Use the corrected attendance.today value from API
+        const todayPresentFromAPI = overviewData?.overview?.attendance?.today || 0
+        
+        console.log('Today present from API:', todayPresentFromAPI)
+        console.log('Debug info from API:', overviewData?.debug_info)
+        
+        // Use the API value instead of calculating from activity records
+        presentToday = todayPresentFromAPI
+        
+        const recentCheckIns = attendanceData.current_activity
+          .sort((a, b) => new Date(b.scan_time || b.created_at) - new Date(a.scan_time || a.created_at))
+          .slice(0, 10)
+
+        setAttendance(recentCheckIns.map(record => ({
+          id: record.attendance_id,
+          studentName: record.student_name,
+          status: record.status,
+          time: record.scan_time,
+          grade: 'N/A'
+        })))
+      } else {
+        console.log('No valid attendance data received')
+        setAttendance([])
+      }
+
+      const calculatedStats = {
+        total_students: totalStudents,
+        present_today: presentToday, 
+        absent_today: Math.max(0, totalStudents - presentToday),
+        students_without_passwords: withoutPasswords,
+        sync_status: syncAgentStatus,
+        attendance_rate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0
+      }
+
+      console.log('Setting calculated stats:', calculatedStats)
+      setStats(calculatedStats)
+
+      console.log('=== SCHOOL ADMIN DATA LOADING COMPLETE ===')
+
+    } catch (error) {
+      console.error('Error in loadSchoolAdminData:', error)
+      setError('Some data could not be loaded: ' + error.message)
+      
+      setStats({
+        total_students: 0,
+        present_today: 0,
+        absent_today: 0,
+        students_without_passwords: 0,
+        sync_status: 'offline'
+      })
+      setStudents([])
+      setAttendance([])
+    }
+}
+
+  const determineSystemHealth = (overview, syncData) => {
+    let totalAgents = 0
+    let onlineAgents = 0
+    let avgHealthScore = 0
+    let errorRate = 0
+
+    if (syncData && syncData.total_agents !== undefined) {
+      totalAgents = syncData.total_agents
+      onlineAgents = syncData.online_agents || 0
+      avgHealthScore = syncData.avg_health_score || 0
+      errorRate = syncData.avg_error_rate || 0
+    } else if (overview && overview.sync_agents) {
+      totalAgents = overview.sync_agents.total || 0
+      onlineAgents = overview.sync_agents.online || 0
+      errorRate = overview.performance?.error_rate || 0
+    }
+
+    console.log('System Health Calculation:', { totalAgents, onlineAgents, avgHealthScore, errorRate })
+
+    if (totalAgents === 0) {
+      return 'no_agents'
+    }
+
+    if (onlineAgents === 0) {
+      return 'error'
+    }
+
+    const onlinePercentage = totalAgents > 0 ? (onlineAgents / totalAgents) * 100 : 0
+
+    if (onlinePercentage >= 60) {
+      return 'healthy'
+    } else if (onlinePercentage >= 20) {
+      return 'degraded'
+    } else {
+      return 'error'
+    }
+  }
+
+
+
+  // FIXED: Better loading state with user validation
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-600 text-4xl mb-2">⚠️</div>
+          <p className="text-gray-600">User information not available</p>
+          <p className="text-sm text-gray-500 mt-2">Please log in again</p>
+          <button 
+            onClick={() => window.location.href = '/login'}
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          <p className="text-sm text-gray-500">
+            {isCompanyAdmin ? 'Loading company data...' : `Loading school data (ID: ${user?.SchoolID || user?.school_id || 'unknown'})...`}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <p className="font-medium">Dashboard Error</p>
+          <p className="text-sm mt-1">{error}</p>
+          <div className="mt-4 space-x-2">
+            <button 
+              onClick={loadDashboardData}
+              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+            >
+              Retry
+            </button>
+            <button 
+              onClick={() => setError('')}
+              className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+      {/* Header Section */}
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          {isCompanyAdmin ? 'ZKTime Company Dashboard' : 'School Administrator'}
+        </h2>
+        <p className="text-gray-600 text-sm sm:text-base">
+          {isCompanyAdmin 
+            ? 'Manage the entire ZKTime network and monitor all schools' 
+            : `Manage ${user.school?.name || 'your school'} (ID: ${user?.SchoolID || user?.school_id})`
+          }
+        </p>
+      </div>
+
+      {/* Stats Cards - Responsive Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+        {isCompanyAdmin ? (
+          <>
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-blue-600 text-sm sm:text-xl">🏫</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Schools Network</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total_schools}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <span className="text-green-600 text-sm sm:text-xl">👥</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Students</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total_students}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <span className="text-purple-600 text-sm sm:text-xl">⚡</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active Sync Agents</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.active_sync_agents}/{stats.total_sync_agents}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${
+                  stats.system_health === 'healthy' ? 'bg-green-100' : 
+                  stats.system_health === 'degraded' ? 'bg-yellow-100' : 'bg-red-100'
+                }`}>
+                  <span className={`text-sm sm:text-xl ${
+                    stats.system_health === 'healthy' ? 'text-green-600' : 
+                    stats.system_health === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {stats.system_health === 'healthy' ? '✓' : 
+                     stats.system_health === 'degraded' ? '⚠' : '✗'}
+                  </span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">System Health</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900 capitalize">{stats.system_health}</p>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-blue-600 text-sm sm:text-xl">👥</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Students</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total_students}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <span className="text-green-600 text-sm sm:text-xl">✅</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Present Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.present_today}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <span className="text-red-600 text-sm sm:text-xl">❌</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Absent Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.absent_today}</p>
+                </div>
+              </div>
+            </div> */}
+
+            {/*In AdminDashboard component, update the present/absent cards to be clickable*/}
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => setActiveTab('attendance')}>
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <span className="text-green-600 text-sm sm:text-xl">✅</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Present Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.present_today}</p>
+                  <p className="text-xs text-green-600 hover:text-green-700">Click to view list →</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => setActiveTab('attendance')}>
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <span className="text-red-600 text-sm sm:text-xl">❌</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Absent Today</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.absent_today}</p>
+                  <p className="text-xs text-red-600 hover:text-red-700">Click to view list →</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-3 sm:p-6 rounded-lg shadow">
+              <div className="flex items-center">
+                <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <span className="text-purple-600 text-sm sm:text-xl">🔐</span>
+                </div>
+                <div className="ml-2 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Need Parent Setup</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.students_without_passwords}</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white rounded-xl shadow-sm mb-6 sm:mb-8">
+        {/* Desktop Navigation */}
+        <div className="hidden md:block border-b border-gray-200">
+          <nav className="flex space-x-8 px-6">
+            {availableTabs.map(tab => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id 
+                    ? 'border-indigo-500 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Mobile Navigation */}
+        <div className="md:hidden border-b border-gray-200">
+          <div className="px-4 py-3">
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="flex items-center">
+                <span className="text-lg mr-2">
+                  {availableTabs.find(tab => tab.id === activeTab)?.icon}
+                </span>
+                <span className="font-medium text-gray-900">
+                  {availableTabs.find(tab => tab.id === activeTab)?.label}
+                </span>
+              </div>
+              <svg 
+                className={`w-5 h-5 text-gray-400 transform transition-transform ${showMobileMenu ? 'rotate-180' : ''}`}
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showMobileMenu && (
+              <div className="mt-3 space-y-1">
+                {availableTabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id)
+                      setShowMobileMenu(false)
+                    }}
+                    className={`flex items-center w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
+                      activeTab === tab.id
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-lg mr-3">{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-4 sm:p-6">
+          {activeTab === 'dashboard' && <DashboardTab attendance={attendance} stats={stats} isCompanyAdmin={isCompanyAdmin} user={user} setActiveTab={setActiveTab} schoolTimeSettings={schoolTimeSettings} />}
+          {activeTab === 'students' && !isCompanyAdmin && <StudentsTab students={students} onRefresh={loadDashboardData} user={user} />}
+          {activeTab === 'upload' && !isCompanyAdmin && <UploadStudentsTab user={user} onUploadComplete={loadDashboardData} />}
+          {activeTab === 'attendance' && <AttendanceTabMobileResponsive attendance={attendance} isCompanyAdmin={isCompanyAdmin} user={user} stats={stats}/>}
+          {activeTab === 'settings' && !isCompanyAdmin && <SchoolSettingsTab user={user} />}
+          {activeTab === 'system-monitor' && isCompanyAdmin && <SystemMonitorTab companyId={user.company_id} user={user} />}
+          {activeTab === 'schools' && isCompanyAdmin && <SchoolsNetworkTab companyId={user.company_id} user={user} />}
+          {activeTab === 'analytics' && isCompanyAdmin && <AnalyticsTab companyId={user.company_id} user={user} />}
+          {activeTab === 'health-monitor' && isCompanyAdmin && <DatabaseHealthMonitor />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// FIXED DashboardTab Component
+function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, schoolTimeSettings }) {
+  if (isCompanyAdmin) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* Network-wide Activity */}
+        <div>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Network Activity Today</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {attendance && attendance.length > 0 ? (
+              attendance.slice(0, 10).map((record) => (
+                <div key={record.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{record.student_name}</p>
+                    <p className="text-sm text-gray-600">{record.school_name || 'Unknown School'}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      record.status === 'IN' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {record.status === 'IN' ? 'Check In' : 'Check Out'}
+                    </span>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(record.scan_time || record.created_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-sm">No network activity today</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* System Overview */}
+        <div>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">System Overview</h3>
+          <div className="space-y-4">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Quick Actions</h4>
+              <div className="space-y-2">
+                <button 
+                  onClick={() => setActiveTab('schools')}
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+                >
+                  Add New School
+                </button>
+                <button 
+                  onClick={() => setActiveTab('analytics')}
+                  className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm"
+                >
+                  View All Reports
+                </button>
+                <button 
+                  onClick={() => setActiveTab('system-monitor')}
+                  className="w-full bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm"
+                >
+                  System Health Check
+                </button>
+              </div>
+            </div>
+            
+            <div className="bg-green-50 rounded-lg p-4">
+              <h4 className="font-medium text-green-900 mb-2">Network Status</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Active Schools:</span>
+                  <span className="font-medium">{stats.total_schools || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Sync Agents Running:</span>
+                  <span className="font-medium">{stats.active_sync_agents || 0}/{stats.total_sync_agents || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Today's Attendance:</span>
+                  <span className="font-medium">{stats.total_attendance_today || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>System Health:</span>
+                  <span className={`font-medium ${
+                    stats.system_health === 'healthy' ? 'text-green-600' :
+                    stats.system_health === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {stats.system_health?.charAt(0).toUpperCase() + stats.system_health?.slice(1) || 'Unknown'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      {/* Settings Configuration Notice */}
+      {!schoolTimeSettings && (
+        <div className="lg:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start">
+            <svg className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-yellow-800">Configure School Time Settings</h4>
+              <p className="text-sm text-yellow-700 mt-1">
+                Set up late arrival and early departure thresholds to automatically track attendance status.
+              </p>
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className="mt-2 bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
+              >
+                Configure Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div>
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Recent Check-ins</h3>
+        <div className="space-y-3 max-h-64 overflow-y-auto">
+          {attendance && attendance.length > 0 ? (
+            attendance.map((record) => (
+              <div key={record.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-gray-900">{record.studentName}</p>
+                  <p className="text-sm text-gray-600">{record.grade || 'Grade N/A'}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    record.status === 'IN' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {record.status === 'IN' ? 'Check In' : 'Check Out'}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(record.time).toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-sm">No check-ins today</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">System Status</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+            <div>
+              <p className="font-medium text-green-900">Database Connection</p>
+              <p className="text-sm text-green-600">Connected to AWS RDS</p>
+            </div>
+            <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+          </div>
+          
+          <div className={`flex justify-between items-center p-3 rounded-lg ${
+            stats.sync_status === 'online' ? 'bg-green-50' : 'bg-red-50'
+          }`}>
+            <div>
+              <p className={`font-medium ${stats.sync_status === 'online' ? 'text-green-900' : 'text-red-900'}`}>
+                Sync Agent
+              </p>
+              <p className={`text-sm ${stats.sync_status === 'online' ? 'text-green-600' : 'text-red-600'}`}>
+                {stats.sync_status === 'online' ? 'Online and running' : 'Offline'}
+              </p>
+            </div>
+            <span className={`w-3 h-3 rounded-full ${
+              stats.sync_status === 'online' ? 'bg-green-500' : 'bg-red-500'
+            }`}></span>
+          </div>
+          
+          <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+            <div>
+              <p className="font-medium text-blue-900">Parent Notifications</p>
+              <p className="text-sm text-blue-600">Email & SMS configured</p>
+            </div>
+            <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// School Settings Tab Component  
+function SchoolSettingsTab({ user }) {
+  const [settings, setSettings] = useState({
+    late_arrival_time: '08:30',
+    early_departure_time: '14:00',
+    school_start_time: '08:00',
+    school_end_time: '15:00',
+    timezone: 'Africa/Accra'
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    fetchSettings()
+  }, [])
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true)
+      const schoolId = user?.school_id || user?.SchoolID || 2
+      const response = await fetch(`/api/school-settings?school_id=${schoolId}`)
+      const data = await response.json()
+      
+      if (data.success && data.settings) {
+        setSettings({
+          late_arrival_time: data.settings.late_arrival_time || '08:30',
+          early_departure_time: data.settings.early_departure_time || '14:00',
+          school_start_time: data.settings.school_start_time || '08:00',
+          school_end_time: data.settings.school_end_time || '15:00',
+          timezone: data.settings.timezone || 'Africa/Accra'
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error)
+      setError('Failed to load settings')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    setSuccess('')
+
+    if (settings.late_arrival_time <= settings.school_start_time) {
+      setError('Late arrival time must be after school start time')
+      setSaving(false)
+      return
+    }
+
+    if (settings.early_departure_time >= settings.school_end_time) {
+      setError('Early departure time must be before school end time')
+      setSaving(false)
+      return
+    }
+
+    try {
+      const schoolId = user?.school_id || user?.SchoolID || 2
+      const response = await fetch('/api/school-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          school_id: schoolId,
+          ...settings
+        })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess('Settings saved successfully!')
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        setError(result.error || 'Failed to save settings')
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      setError('Failed to save settings: Network error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">School Time Settings</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          Configure attendance timing rules for your school. These settings determine when students are marked as late or leaving early.
+        </p>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+          {success}
+        </div>
+      )}
+
+      <form onSubmit={handleSaveSettings} className="space-y-6">
+        <div className="bg-white p-6 rounded-lg shadow border">
+          <h4 className="text-md font-medium text-gray-900 mb-4">School Hours</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                School Start Time
+              </label>
+              <input
+                type="time"
+                value={settings.school_start_time}
+                onChange={(e) => setSettings({...settings, school_start_time: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                School End Time
+              </label>
+              <input
+                type="time"
+                value={settings.school_end_time}
+                onChange={(e) => setSettings({...settings, school_end_time: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow border">
+          <h4 className="text-md font-medium text-gray-900 mb-4">Attendance Thresholds</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Late Arrival Threshold
+              </label>
+              <input
+                type="time"
+                value={settings.late_arrival_time}
+                onChange={(e) => setSettings({...settings, late_arrival_time: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Early Departure Threshold
+              </label>
+              <input
+                type="time"
+                value={settings.early_departure_time}
+                onChange={(e) => setSettings({...settings, early_departure_time: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+          
+          <button
+            type="button"
+            onClick={fetchSettings}
+            disabled={saving}
+            className="w-full sm:w-auto bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 font-medium"
+          >
+            Reset to Saved
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+
+// function StudentsTab({ students, onRefresh, user }) {
+//   const [searchTerm, setSearchTerm] = useState('')
+//   const [filterStatus, setFilterStatus] = useState('all')
+//   const [selectedGrade, setSelectedGrade] = useState('')
+//   const [loading, setLoading] = useState(false)
+//   const [showModal, setShowModal] = useState(false)
+//   const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete', 'view'
+//   const [selectedStudent, setSelectedStudent] = useState(null)
+//   const [grades, setGrades] = useState([])
+  
+//   const [studentForm, setStudentForm] = useState({
+//     name: '',
+//     grade: '',
+//     student_code: '',
+//     parent_password: '',
+//     is_active: true
+//   })
+
+//   const [showPasswords, setShowPasswords] = useState({
+//     addPassword: false,
+//     editPassword: false
+//   })
+
+//   const togglePasswordVisibility = (field) => {
+//     setShowPasswords(prev => ({
+//       ...prev,
+//       [field]: !prev[field]
+//     }))
+//   }
+
+//   // Extract unique grades from students
+//   useEffect(() => {
+//     const uniqueGrades = [...new Set(students.map(s => s.grade).filter(Boolean))].sort()
+//     setGrades(uniqueGrades)
+//   }, [students])
+
+//   const filteredStudents = students.filter(student => {
+//     const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.studentCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//                          student.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+//     const matchesFilter = filterStatus === 'all' ||
+//                          (filterStatus === 'with_password' && (student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'without_password' && !(student.parentPasswordSet || student.parent_password_set)) ||
+//                          (filterStatus === 'active' && student.is_active !== false) ||
+//                          (filterStatus === 'inactive' && student.is_active === false)
+    
+//     const matchesGrade = !selectedGrade || student.grade === selectedGrade
+    
+//     return matchesSearch && matchesFilter && matchesGrade
+//   })
+
+//   const resetForm = () => {
+//     setStudentForm({
+//       name: '',
+//       grade: '',
+//       student_code: '',
+//       parent_password: '',
+//       is_active: true
+//     })
+//   }
+
+//   // Modal handlers
+//   const openModal = (type, student = null) => {
+//     setModalType(type)
+//     setSelectedStudent(student)
+    
+//     if (type === 'edit' && student) {
+//       setStudentForm({
+//         name: student.name || '',
+//         grade: student.grade || '',
+//         student_code: student.student_code || student.studentCode || '',
+//         parent_password: '',
+//         is_active: student.is_active !== false
+//       })
+//     } else if (type === 'add') {
+//       resetForm()
+//       if (selectedGrade) {
+//         setStudentForm(prev => ({ ...prev, grade: selectedGrade }))
+//       }
+//     }
+    
+//     setShowModal(true)
+//   }
+
+//   const closeModal = () => {
+//     setShowModal(false)
+//     setModalType('')
+//     setSelectedStudent(null)
+//     resetForm()
+//     setShowPasswords({
+//     addPassword: false,
+//     editPassword: false
+//   })
+//   }
+
+//   // CRUD operations
+//   const handleSave = async (e) => {
+//     e.preventDefault()
+    
+//     if (!studentForm.name.trim()) {
+//       alert('Student name is required')
+//       return
+//     }
+
+//     setLoading(true)
+    
+//     try {
+//       let response
+      
+//       if (modalType === 'add') {
+//         response = await fetch('/api/students', {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify({
+//             ...studentForm,
+//             school_id: user.school_id || user.SchoolID,
+//             name: studentForm.name.trim()
+//           })
+//         })
+//       } else if (modalType === 'edit') {
+//         response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//           method: 'PUT',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify(studentForm)
+//         })
+//       }
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
+//       } else {
+//         alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error(`${modalType} student error:`, error)
+//       alert(`Failed to ${modalType} student: Network error`)
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   const handleDelete = async (force = false) => {
+//     setLoading(true)
+    
+//     try {
+//       const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+//         method: 'DELETE',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify({ force_delete: force })
+//       })
+
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         closeModal()
+//         onRefresh()
+//         alert(result.message || 'Student deleted successfully!')
+//       } else {
+//         alert('Failed to delete student: ' + (result.error || 'Unknown error'))
+//       }
+//     } catch (error) {
+//       console.error('Delete student error:', error)
+//       alert('Failed to delete student: Network error')
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   return (
+//     <div>
+//       {/* Header */}
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <div>
+//           <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
+//           <p className="text-gray-600 text-sm">
+//             {selectedGrade ? `Grade ${selectedGrade} students` : 'All students'} 
+//             ({filteredStudents.length} of {students.length} total)
+//           </p>
+//         </div>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <button 
+//             onClick={onRefresh} 
+//             disabled={loading}
+//             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
+//           >
+//             {loading ? 'Loading...' : 'Refresh'}
+//           </button>
+//           <button 
+//             onClick={() => openModal('add')}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+//           >
+//             Add Student
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Filters */}
+//       <div className="flex flex-col sm:flex-row gap-4 mb-6">
+//         <div className="flex-1">
+//           <input
+//             type="text"
+//             placeholder="Search by name or student code..."
+//             value={searchTerm}
+//             onChange={(e) => setSearchTerm(e.target.value)}
+//             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+//           />
+//         </div>
+        
+//         {/* Grade Filter */}
+//         {grades.length > 0 && (
+//           <select
+//             value={selectedGrade}
+//             onChange={(e) => setSelectedGrade(e.target.value)}
+//             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//           >
+//             <option value="">All Grades</option>
+//             {grades.map((grade) => (
+//               <option key={grade} value={grade}>
+//                 Grade {grade}
+//               </option>
+//             ))}
+//           </select>
+//         )}
+        
+//         <select
+//           value={filterStatus}
+//           onChange={(e) => setFilterStatus(e.target.value)}
+//           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
+//         >
+//           <option value="all">All Students</option>
+//           <option value="active">Active Students</option>
+//           <option value="inactive">Inactive Students</option>
+//           <option value="with_password">With Parent Password</option>
+//           <option value="without_password">Need Parent Setup</option>
+//         </select>
+//       </div>
+
+//       {/* Students Table */}
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <table className="min-w-full divide-y divide-gray-200">
+//             <thead className="bg-gray-50">
+//               <tr>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Student
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Grade
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                   Student Code
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Status
+//                 </th>
+//                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                   Actions
+//                 </th>
+//               </tr>
+//             </thead>
+//             <tbody className="bg-white divide-y divide-gray-200">
+//               {filteredStudents.length > 0 ? filteredStudents.map((student) => (
+//                 <tr key={student.id || student.student_id}>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
+//                     <div className="text-xs text-gray-500">ID: {student.id || student.student_id}</div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <div className="text-sm text-gray-500">{student.grade || 'Not set'}</div>
+//                     <div className="text-xs text-gray-500">
+//                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                         (student.parentPasswordSet || student.parent_password_set) ? 
+//                         'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+//                       }`}>
+//                         {(student.parentPasswordSet || student.parent_password_set) ? 'Parent OK' : 'Setup needed'}
+//                       </span>
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
+//                     <div className="text-sm font-mono text-gray-900">
+//                       {student.studentCode || student.student_code || 'Not set'}
+//                     </div>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4">
+//                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+//                       student.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+//                     }`}>
+//                       {student.is_active !== false ? 'Active' : 'Inactive'}
+//                     </span>
+//                   </td>
+//                   <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+//                     <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+//                       <button 
+//                         onClick={() => openModal('view', student)}
+//                         className="text-blue-600 hover:text-blue-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         View
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('edit', student)}
+//                         className="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Edit
+//                       </button>
+//                       <button 
+//                         onClick={() => openModal('delete', student)}
+//                         className="text-red-600 hover:text-red-900 text-xs sm:text-sm"
+//                         disabled={loading}
+//                       >
+//                         Delete
+//                       </button>
+//                     </div>
+//                   </td>
+//                 </tr>
+//               )) : (
+//                 <tr>
+//                   <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+//                     {selectedGrade ? `No students found in Grade ${selectedGrade}` : 'No students found'}
+//                   </td>
+//                 </tr>
+//               )}
+//             </tbody>
+//           </table>
+//         </div>
+//       </div>
+
+//       {/* Grade Summary Cards */}
+//       {grades.length > 0 && (
+//         <div className="mt-6 bg-white p-4 rounded-lg shadow border">
+//           <h4 className="text-md font-medium text-gray-900 mb-3">Grade Distribution</h4>
+//           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+//             {grades.map((grade) => (
+//               <div 
+//                 key={grade}
+//                 className={`text-center p-3 rounded-lg cursor-pointer transition-colors ${
+//                   selectedGrade === grade 
+//                     ? 'bg-blue-100 border-2 border-blue-500' 
+//                     : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+//                 }`}
+//                 onClick={() => setSelectedGrade(selectedGrade === grade ? '' : grade)}
+//               >
+//                 <div className="text-sm font-bold text-gray-900">Grade {grade}</div>
+//                 <div className="text-xs text-gray-600">
+//                   {students.filter(s => s.grade === grade).length} students
+//                 </div>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Modal */}
+//       {showModal && (
+//         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+//           <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+//             <div className="flex justify-between items-center mb-4">
+//               <h4 className="text-lg font-semibold text-gray-900">
+//                 {modalType === 'add' && 'Add New Student'}
+//                 {modalType === 'edit' && 'Edit Student'}
+//                 {modalType === 'delete' && 'Delete Student'}
+//                 {modalType === 'view' && 'Student Details'}
+//               </h4>
+//               <button
+//                 onClick={closeModal}
+//                 className="text-gray-400 hover:text-gray-600"
+//               >
+//                 ✕
+//               </button>
+//             </div>
+
+//             {/* Modal Content */}
+//             {(modalType === 'add' || modalType === 'edit') && (
+//               <form onSubmit={handleSave} className="space-y-4">
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Name *
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.name}
+//                     onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Enter full name"
+//                     required
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Grade
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.grade}
+//                     onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="e.g., 10th, Grade 5"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Student Code
+//                   </label>
+//                   <input
+//                     type="text"
+//                     value={studentForm.student_code}
+//                     onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                     placeholder="Optional unique code"
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">
+//                     Parent Password
+//                   </label>
+//                   <div className="relative">
+//                     <input
+//                       type={showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? "text" : "password"}
+//                       value={studentForm.parent_password}
+//                       onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
+//                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+//                       placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
+//                     />
+//                     <button
+//                       type="button"
+//                       onClick={() => togglePasswordVisibility(modalType === 'add' ? 'addPassword' : 'editPassword')}
+//                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+//                     >
+//                       {showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+//                         </svg>
+//                       ) : (
+//                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+//                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+//                         </svg>
+//                       )}
+//                     </button>
+//                   </div>
+//                 </div>
+
+//                 <div className="flex items-center">
+//                   <input
+//                     type="checkbox"
+//                     checked={studentForm.is_active}
+//                     onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+//                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+//                   />
+//                   <label className="ml-2 block text-sm text-gray-900">Active</label>
+//                 </div>
+
+//                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
+//                   <button
+//                     type="submit"
+//                     disabled={loading}
+//                     className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+//                   >
+//                     {loading ? (modalType === 'add' ? 'Adding...' : 'Updating...') : (modalType === 'add' ? 'Add Student' : 'Update Student')}
+//                   </button>
+//                   <button
+//                     type="button"
+//                     onClick={closeModal}
+//                     disabled={loading}
+//                     className="w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                 </div>
+//               </form>
+//             )}
+
+//             {modalType === 'view' && selectedStudent && (
+//               <div className="space-y-3">
+//                 <p><strong>Name:</strong> {selectedStudent.name}</p>
+//                 <p><strong>Student ID:</strong> {selectedStudent.id || selectedStudent.student_id}</p>
+//                 <p><strong>Grade:</strong> {selectedStudent.grade || 'Not set'}</p>
+//                 <p><strong>Student Code:</strong> {selectedStudent.student_code || selectedStudent.studentCode || 'Not set'}</p>
+//                 <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
+//                 <p><strong>Parent Password:</strong> {(selectedStudent.parentPasswordSet || selectedStudent.parent_password_set) ? 'Set' : 'Not set'}</p>
+//                 <p><strong>Last Activity:</strong> {
+//                   selectedStudent.last_activity 
+//                     ? new Date(selectedStudent.last_activity).toLocaleString()
+//                     : 'No activity'
+//                 }</p>
+//                 <div className="flex justify-end mt-6">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Close
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+
+//             {modalType === 'delete' && selectedStudent && (
+//               <div>
+//                 <p className="text-gray-700 mb-4">
+//                   Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
+//                 </p>
+//                 <div className="flex justify-end space-x-3">
+//                   <button
+//                     onClick={closeModal}
+//                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+//                   >
+//                     Cancel
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(false)}
+//                     className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Deactivate'}
+//                   </button>
+//                   <button
+//                     onClick={() => handleDelete(true)}
+//                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+//                     disabled={loading}
+//                   >
+//                     {loading ? 'Processing...' : 'Force Delete'}
+//                   </button>
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+function StudentsTab({ onRefresh, user }) {
+  // STATE MANAGEMENT
+  const [students, setStudents] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [selectedGrade, setSelectedGrade] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [modalType, setModalType] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState(null)
+  const [grades, setGrades] = useState([])
+  
+  // NEW: Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalStudents, setTotalStudents] = useState(0)
+  const [filteredTotal, setFilteredTotal] = useState(0)
+  const [pagination, setPagination] = useState({})
+
+  const [studentForm, setStudentForm] = useState({
+    name: '',
+    grade: '',
+    student_code: '',
+    parent_password: '',
+    is_active: true
+  })
+
+  const [showPasswords, setShowPasswords] = useState({
+    addPassword: false,
+    editPassword: false
+  })
+
+  // Page size options
+  const pageSizeOptions = [
+    { value: 20, label: '20' },
+    { value: 50, label: '50' },
+    { value: 100, label: '100' },
+    { value: 200, label: '200' },
+    { value: 'all', label: 'All' }
+  ]
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }))
+  }
+
+  // MODIFIED: Load students from API with pagination
+  const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFilter = '', statusFilter = 'all') => {
+    setLoading(true)
+    try {
+      const schoolId = user?.SchoolID || user?.school_id
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        school_id: schoolId,
+        page: page,
+        limit: limit === 'all' ? '999999' : limit,
+        include_stats: 'false' // Don't include stats for list view for better performance
+      })
+      
+      // Add filters
+      if (searchTerm.trim()) {
+        params.append('search', searchTerm.trim())
+      }
+      
+      if (gradeFilter) {
+        params.append('grade', gradeFilter)
+      }
+      
+      // Convert status filter to API parameters
+      if (statusFilter === 'active' || statusFilter === 'inactive') {
+        params.append('active_only', statusFilter === 'active' ? 'true' : 'false')
+      } else if (statusFilter === 'active') {
+        params.append('active_only', 'true')
+      }
+      
+      console.log('Loading students with params:', params.toString())
+      
+      const response = await fetch(`/api/students?${params}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        const studentsData = data.data || data.students || []
+        setStudents(studentsData)
+        setTotalStudents(data.totals?.total_students || data.total || studentsData.length)
+        setFilteredTotal(data.totals?.filtered_total || data.total || studentsData.length)
+        setPagination(data.pagination || {})
+        
+        // // Extract grades from API or current data
+        // if (studentsData.length > 0) {
+        //   const uniqueGrades = [...new Set(studentsData.map(s => s.grade).filter(Boolean))].sort()
+        //   setGrades(uniqueGrades)
+        // }
+        
+        console.log('Students loaded:', {
+          page,
+          limit,
+          total: data.totals?.total_students,
+          filtered: data.totals?.filtered_total,
+          returned: studentsData.length
+        })
+      } else {
+        console.error('Failed to load students:', data.error)
+        setStudents([])
+      }
+    } catch (error) {
+      console.error('Error loading students:', error)
+      setStudents([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+// Load grades separately for filter dropdown
+const loadGrades = async () => {
+  try {
+    const schoolId = user?.SchoolID || user?.school_id
+    const response = await fetch(`/api/students?type=grades&school_id=${schoolId}`)
+    const data = await response.json()
+    
+    if (data.success && data.grades) {
+      // Remove duplicates and sort
+      const uniqueGrades = [...new Set(data.grades)].sort((a, b) => {
+        // Try to sort numerically first, then alphabetically
+        const numA = parseInt(a)
+        const numB = parseInt(b)
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB
+        }
+        return String(a).localeCompare(String(b))
+      })
+      setGrades(uniqueGrades)
+    }
+  } catch (error) {
+    console.error('Error loading grades:', error)
+  }
+}
+
+  // MODIFIED: Handle search with server-side filtering
+  const handleSearchChange = (value) => {
+    setSearchTerm(value)
+    setCurrentPage(1) // Reset to first page when searching
+    
+    // Debounce search
+    clearTimeout(window.searchTimeout)
+    window.searchTimeout = setTimeout(() => {
+      loadStudents(1, pageSize, value, selectedGrade, filterStatus)
+    }, 500)
+  }
+
+  // MODIFIED: Handle filter changes with server-side filtering
+  const handleGradeChange = (value) => {
+    setSelectedGrade(value)
+    resetPagination()
+    setCurrentPage(1)
+    loadStudents(1, pageSize, searchTerm, value, filterStatus)
+  }
+
+  const handleStatusChange = (value) => {
+    setFilterStatus(value)
+    resetPagination()
+    setCurrentPage(1)
+    loadStudents(1, pageSize, searchTerm, selectedGrade, value)
+  }
+
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize)
+    setCurrentPage(1)
+    loadStudents(1, newPageSize, searchTerm, selectedGrade, filterStatus)
+  }
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    loadStudents(newPage, pageSize, searchTerm, selectedGrade, filterStatus)
+  }
+
+  // MODIFIED: Refresh function
+  const handleRefresh = () => {
+    loadStudents(currentPage, pageSize, searchTerm, selectedGrade, filterStatus)
+    if (onRefresh) onRefresh() // Also call parent refresh for dashboard stats
+  }
+
+  // Load initial data
+  useEffect(() => {
+    loadStudents(1, pageSize)
+    loadGrades()
+  }, [])
+
+  // REMOVED: Client-side filtering (now done server-side)
+  const filteredStudents = students // Students are already filtered server-side
+
+  const resetForm = () => {
+    setStudentForm({
+      name: '',
+      grade: '',
+      student_code: '',
+      parent_password: '',
+      is_active: true
+    })
+  }
+
+  // Modal handlers
+  const openModal = (type, student = null) => {
+    setModalType(type)
+    setSelectedStudent(student)
+    
+    if (type === 'edit' && student) {
+      setStudentForm({
+        name: student.name || '',
+        grade: student.grade || '',
+        student_code: student.student_code || student.studentCode || '',
+        parent_password: '',
+        is_active: student.is_active !== false
+      })
+    } else if (type === 'add') {
+      resetForm()
+      if (selectedGrade) {
+        setStudentForm(prev => ({ ...prev, grade: selectedGrade }))
+      }
+    }
+    
+    setShowModal(true)
+  }
+
+  const closeModal = () => {
+    setShowModal(false)
+    setModalType('')
+    setSelectedStudent(null)
+    resetForm()
+    setShowPasswords({
+      addPassword: false,
+      editPassword: false
+    })
+  }
+
+  // CRUD operations
+  const handleSave = async (e) => {
+    e.preventDefault()
+    
+    if (!studentForm.name.trim()) {
+      alert('Student name is required')
+      return
+    }
+
+    setLoading(true)
+    
+    try {
+      let response
+      
+      if (modalType === 'add') {
+        response = await fetch('/api/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...studentForm,
+            school_id: user.school_id || user.SchoolID,
+            name: studentForm.name.trim()
+          })
+        })
+      } else if (modalType === 'edit') {
+        response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(studentForm)
+        })
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        closeModal()
+        handleRefresh() // Reload current page
+        alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
+      } else {
+        alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error(`${modalType} student error:`, error)
+      alert(`Failed to ${modalType} student: Network error`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (force = false) => {
+    setLoading(true)
+    
+    try {
+      const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_delete: force })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        closeModal()
+        handleRefresh() // Reload current page
+        alert(result.message || 'Student deleted successfully!')
+      } else {
+        alert('Failed to delete student: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Delete student error:', error)
+      alert('Failed to delete student: Network error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Student Management</h3>
+          <p className="text-gray-600 text-sm">
+            {/* UPDATED: Show correct counts */}
+            {filteredTotal !== totalStudents ? (
+              <>
+                Showing {pagination.showing_range?.from || 1}-{pagination.showing_range?.to || students.length} 
+                of {filteredTotal} filtered results ({totalStudents} total students)
+              </>
+            ) : (
+              <>
+                Showing {pagination.showing_range?.from || 1}-{pagination.showing_range?.to || students.length} 
+                of {totalStudents} students
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button 
+            onClick={handleRefresh} 
+            disabled={loading}
+            className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
+          >
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+          <button 
+            onClick={() => openModal('add')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+          >
+            Add Student
+          </button>
+        </div>
+      </div>
+
+      {/* UPDATED: Filters and Pagination Controls */}
+      <div className="bg-gray-50 p-4 rounded-lg mb-6">
+        <div className="flex flex-col lg:flex-row gap-4 mb-4">
+          {/* Search */}
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search by name or student code..."
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+          
+          {/* Grade Filter */}
+          <select
+            value={selectedGrade}
+            onChange={(e) => handleGradeChange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            <option value="">All Grades</option>
+            {grades.map((grade) => (
+              <option key={grade} value={grade}>
+                Grade {grade}
+              </option>
+            ))}
+          </select>
+          
+          {/* Status Filter */}
+          <select
+            value={filterStatus}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            <option value="all">All Students</option>
+            <option value="active">Active Students</option>
+            <option value="inactive">Inactive Students</option>
+            <option value="with_password">With Parent Password</option>
+            <option value="without_password">Need Parent Setup</option>
+          </select>
+        </div>
+
+        {/* NEW: Pagination Controls */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Items per page:</label>
+            <select 
+              value={pageSize} 
+              onChange={(e) => handlePageSizeChange(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-sm"
+            >
+              {pageSizeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Page navigation - only show if not showing all */}
+          {pageSize !== 'all' && pagination.total_pages > 1 && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={!pagination.has_previous || loading}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                Previous
+              </button>
+              
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {pagination.total_pages}
+              </span>
+              
+              <button 
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!pagination.has_more || loading}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Students Table */}
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="inline-block min-w-full align-middle">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Student
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Grade
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                  Student Code
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                      Loading students...
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredStudents.length > 0 ? filteredStudents.map((student) => (
+                <tr key={student.id || student.student_id}>
+                  <td className="px-3 sm:px-6 py-4">
+                    <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                    <div className="text-xs text-gray-500">ID: {student.id || student.student_id}</div>
+                  </td>
+                  <td className="px-3 sm:px-6 py-4">
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                      {student.grade || 'N/A'}
+                    </span>
+                    <div className="text-xs text-gray-500 mt-1">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        (student.parentPasswordSet || student.parent_password_set) ? 
+                        'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {(student.parentPasswordSet || student.parent_password_set) ? 'Parent OK' : 'Setup needed'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
+                    <div className="text-sm font-mono text-gray-900">
+                      {student.studentCode || student.student_code || 'Not set'}
+                    </div>
+                  </td>
+                  <td className="px-3 sm:px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      student.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {student.is_active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+                    <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+                      <button 
+                        onClick={() => openModal('view', student)}
+                        className="text-blue-600 hover:text-blue-900 text-xs sm:text-sm"
+                        disabled={loading}
+                      >
+                        View
+                      </button>
+                      <button 
+                        onClick={() => openModal('edit', student)}
+                        className="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm"
+                        disabled={loading}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => openModal('delete', student)}
+                        className="text-red-600 hover:text-red-900 text-xs sm:text-sm"
+                        disabled={loading}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    {searchTerm || selectedGrade || filterStatus !== 'all' ? 
+                      'No students match your filters' : 'No students found'
+                    }
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Footer Pagination (for convenience) */}
+      {pageSize !== 'all' && pagination.total_pages > 1 && !loading && (
+        <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Showing {pagination.showing_range?.from || 1} to {pagination.showing_range?.to || students.length} 
+            of {filteredTotal} results
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!pagination.has_previous}
+              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+            >
+              Previous
+            </button>
+            
+            <span className="text-sm text-gray-600">
+              {currentPage} of {pagination.total_pages}
+            </span>
+            
+            <button 
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!pagination.has_more}
+              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-lg font-semibold text-gray-900">
+                {modalType === 'add' && 'Add New Student'}
+                {modalType === 'edit' && 'Edit Student'}
+                {modalType === 'delete' && 'Delete Student'}
+                {modalType === 'view' && 'Student Details'}
+              </h4>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            {(modalType === 'add' || modalType === 'edit') && (
+              <form onSubmit={handleSave} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Student Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={studentForm.name}
+                    onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter full name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Grade
+                  </label>
+                  <input
+                    type="text"
+                    value={studentForm.grade}
+                    onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 10th, Grade 5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Student Code
+                  </label>
+                  <input
+                    type="text"
+                    value={studentForm.student_code}
+                    onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Optional unique code"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Parent Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? "text" : "password"}
+                      value={studentForm.parent_password}
+                      onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility(modalType === 'add' ? 'addPassword' : 'editPassword')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={studentForm.is_active}
+                    onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-900">Active</label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {loading ? (modalType === 'add' ? 'Adding...' : 'Updating...') : (modalType === 'add' ? 'Add Student' : 'Update Student')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    disabled={loading}
+                    className="w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {modalType === 'view' && selectedStudent && (
+              <div className="space-y-3">
+                <p><strong>Name:</strong> {selectedStudent.name}</p>
+                <p><strong>Student ID:</strong> {selectedStudent.id || selectedStudent.student_id}</p>
+                <p><strong>Grade:</strong> {selectedStudent.grade || 'Not set'}</p>
+                <p><strong>Student Code:</strong> {selectedStudent.student_code || selectedStudent.studentCode || 'Not set'}</p>
+                <p><strong>Status:</strong> {selectedStudent.is_active !== false ? 'Active' : 'Inactive'}</p>
+                <p><strong>Parent Password:</strong> {(selectedStudent.parentPasswordSet || selectedStudent.parent_password_set) ? 'Set' : 'Not set'}</p>
+                <p><strong>Last Activity:</strong> {
+                  selectedStudent.last_activity 
+                    ? new Date(selectedStudent.last_activity).toLocaleString()
+                    : 'No activity'
+                }</p>
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={closeModal}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {modalType === 'delete' && selectedStudent && (
+              <div>
+                <p className="text-gray-700 mb-4">
+                  Are you sure you want to delete <strong>{selectedStudent.name}</strong>?
+                </p>
+                
+                {/* Information about potential data loss */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-yellow-800">
+                        This student may have related data
+                      </h3>
+                      <div className="mt-2 text-sm text-yellow-700">
+                        <p>This student might have attendance records, parent accounts, or other related data that will affect the deletion process.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Option 1: Deactivate (Recommended) */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">Recommended: Deactivate Student</h4>
+                    <p className="text-sm text-blue-700 mb-3">
+                      Marks the student as inactive but keeps all attendance records and related data. 
+                      The student won't appear in active lists but data is preserved for reports.
+                    </p>
+                    <button
+                      onClick={() => handleDelete(false)}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                      disabled={loading}
+                    >
+                      {loading ? 'Processing...' : 'Deactivate Student (Recommended)'}
+                    </button>
+                  </div>
+
+                  {/* Option 2: Force Delete (Dangerous) */}
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                    <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ Permanent Deletion</h4>
+                    <p className="text-sm text-red-700 mb-3">
+                      <strong>Warning:</strong> This will permanently delete the student AND all related data including:
+                    </p>
+                    <ul className="text-sm text-red-700 mb-3 ml-4 list-disc">
+                      <li>All attendance records</li>
+                      <li>Parent accounts and logins</li>
+                      <li>Historical data for reports</li>
+                    </ul>
+                    <p className="text-xs text-red-600 mb-3">
+                      <strong>This action cannot be undone!</strong>
+                    </p>
+                    <button
+                      onClick={() => handleDelete(true)}
+                      className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+                      disabled={loading}
+                    >
+                      {loading ? 'Processing...' : 'Permanently Delete All Data'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cancel button */}
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <button
+                    onClick={closeModal}
+                    className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UploadStudentsTab({ user, onUploadComplete }) {
+  const [file, setFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [results, setResults] = useState(null)
+
+  const downloadTemplate = () => {
+      const schoolId = user.school_id || user.SchoolID || 2  
+      const csvContent = [
+      [`# Template for School ID: ${schoolId}`, '', '', '', '', '', ''],
+      [`# Generated: ${new Date().toISOString()}`, '', '', '', '', '', ''],
+        // Headers
+      ['name', 'grade', 'student_code', 'parent_name', 'parent_email', 'parent_phone', 'parent_password'],
+      // Example data
+      ['John Smith', '10th', 'JS001', 'Mary Smith', 'mary.smith@email.com', '+233244567890', '12345'],
+      ['Jane Doe', '9th', 'JD002', 'Robert Doe', 'robert.doe@email.com', '+233244567891', '12345'],
+      ['Mike Johnson', '11th', 'MJ003', 'Sarah Johnson', 'sarah.johnson@email.com', '+233244567892', '12345'],
+      ['', '', '', '', '', '', ''],
+      // Instructions
+      ['INSTRUCTIONS:', '', '', '', '', '', ''],
+      ['- name: Student full name (required)', '', '', '', '', '', ''],
+      ['- grade: Student grade/class', '', '', '', '', '', ''],
+      ['- student_code: Unique identifier (optional)', '', '', '', '', '', ''],
+      ['- parent_name: Parent/Guardian name (optional)', '', '', '', '', '', ''],
+      ['- parent_email: Parent email for notifications', '', '', '', '', '', ''],
+      ['- parent_phone: Parent phone number', '', '', '', '', '', ''],
+      ['- parent_password: Default "12345", parent can change later', '', '', '', '', '', '']
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `student_upload_template_school_${schoolId}_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleFileUpload = async (e) => {
+    e.preventDefault()
+      // DEBUG: Let's see what school IDs we have
+  console.log('=== UPLOAD DEBUG ===')
+  console.log('Full user object:', user)
+  console.log('user.school_id:', user.school_id)
+  console.log('user.SchoolID:', user.SchoolID)
+  console.log('user.school?.id:', user.school?.id)
+  console.log('Expected school ID should be:', 34) // Replace with actual expected ID
+  console.log('===================')
+
+    if (!file) {
+      alert('Please select a file to upload')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('school_id', user.school_id || user.SchoolID || 2)
+
+
+    setUploading(true)
+    setResults(null)
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+      setResults(result)
+      
+      if (result.success) {
+        onUploadComplete()
+        alert(`Upload successful! ${result.summary?.students_added || 0} students added, ${result.summary?.students_updated || 0} updated, ${result.summary?.parents_created || 0} parent records created.`)
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      setResults({ success: false, error: 'Upload failed: Network error' })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Upload Students with Parent Information</h3>
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <h4 className="font-medium text-blue-900 mb-2">Enhanced CSV Template</h4>
+        <p className="text-sm text-blue-800 mb-4">
+          New template includes parent contact information and default passwords. 
+          Download the template to ensure your CSV file has the correct format.
+        </p>
+        
+        <div className="space-y-2 text-sm text-blue-700">
+          <p><strong>New Features:</strong></p>
+          <ul className="list-disc list-inside ml-4 space-y-1">
+            <li>Parent name, email, and phone number columns</li>
+            <li>Default password "12345" for all parents</li>
+            <li>Parents can login immediately and change password later</li>
+            <li>Automatic parent account creation</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={downloadTemplate}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+        >
+          Download Enhanced Template
+        </button>
+      </div>
+
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <h4 className="font-medium text-yellow-900 mb-2">Important Notes</h4>
+        <div className="space-y-2 text-sm text-yellow-800">
+          <p><strong>Default Password:</strong> All parents will get "12345" as default password</p>
+          <p><strong>Parent Login:</strong> Parents can login using their child's full name + "12345"</p>
+          <p><strong>Password Reset:</strong> Parents can change their password using the "Reset Password" option</p>
+          <p><strong>Contact Info:</strong> Email and phone are optional but recommended for notifications</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleFileUpload} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Enhanced CSV File to Upload
+          </label>
+          <div className="flex items-center justify-center w-full">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="mb-2 text-sm text-gray-500">
+                  <span className="font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-gray-500">CSV files with parent information</p>
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setFile(e.target.files[0])}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+          </div>
+          {file && (
+            <div className="mt-2 text-sm text-gray-600">
+              <p>Selected: <span className="font-medium">{file.name}</span></p>
+              <p className="text-xs text-gray-500">
+                Make sure your CSV includes columns: name, grade, student_code, parent_name, parent_email, parent_phone, parent_password
+              </p>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={!file || uploading}
+          className="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {uploading ? 'Uploading Students & Parents...' : 'Upload Students & Parent Data'}
+        </button>
+      </form>
+
+      {results && (
+        <div className={`mt-6 p-4 rounded-lg ${results.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <h4 className={`font-medium mb-2 ${results.success ? 'text-green-900' : 'text-red-900'}`}>
+            Upload Results
+          </h4>
+          
+          {results.success ? (
+            <div className="space-y-2 text-sm text-green-800">
+              <p><strong>Students Added:</strong> {results.summary?.students_added || 0}</p>
+              <p><strong>Students Updated:</strong> {results.summary?.students_updated || 0}</p>
+              <p><strong>Parent Records Created:</strong> {results.summary?.parents_created || 0}</p>
+              <p><strong>Parent Records Updated:</strong> {results.summary?.parents_updated || 0}</p>
+              <p><strong>Default Passwords Set:</strong> {results.summary?.default_passwords_set || 0}</p>
+              
+              {results.warnings && results.warnings.length > 0 && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <p className="font-medium text-yellow-900">Warnings:</p>
+                  <ul className="list-disc list-inside text-yellow-800">
+                    {results.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm text-red-800">
+              <p><strong>Error:</strong> {results.error}</p>
+              {results.details && (
+                <div className="mt-2">
+                  <p className="font-medium">Details:</p>
+                  <pre className="text-xs bg-red-100 p-2 rounded mt-1 overflow-x-auto">{results.details}</pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user, stats }) {
+//   const [dateRange, setDateRange] = useState({
+//     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+//     to: new Date().toISOString().split('T')[0]
+//   })
+//   const [attendanceData, setAttendanceData] = useState(attendance)
+//   const [timeSettings, setTimeSettings] = useState(null)
+//   const [loading, setLoading] = useState(false)
+//   const [error, setError] = useState(null)
+//   const [statusFilter, setStatusFilter] = useState('all')
+//   const [gradeFilter, setGradeFilter] = useState('')
+//   const [availableGrades, setAvailableGrades] = useState([])
+//   const [exporting, setExporting] = useState(false)
+//   const [attendanceFilter, setAttendanceFilter] = useState('present')
+//   const [absentStudents, setAbsentStudents] = useState([])
+
+// useEffect(() => {
+//   setAttendanceData(attendance)
+//   loadTimeSettings()
+//   loadAvailableGrades()
+//   if (!isCompanyAdmin) {
+//     loadAbsentStudents()
+//   }
+// }, [attendance])
+
+//   // Excel Export Function
+//   const exportToExcel = async () => {
+//     if (!filteredData.length) {
+//       alert('No data to export')
+//       return
+//     }
+
+//     setExporting(true)
+    
+//     try {
+//       // Prepare the data for export
+//       const exportData = filteredData.map(record => ({
+//         'Student Name': record.studentName || record.student_name || 'Unknown Student',
+//         'Grade': record.grade || 'N/A',
+//         'Status': record.status === 'IN' ? 'Check In' : record.status === 'OUT' ? 'Check Out' : record.status || 'Unknown',
+//         'Enhanced Status': record.statusLabel || (record.status === 'IN' ? 'Check In' : 'Check Out'),
+//         'Date': formatDate(record.scan_time || record.time || record.created_at),
+//         'Time': formatTime(record.scan_time || record.time || record.created_at),
+//         'School': record.school_name || (isCompanyAdmin ? 'Unknown School' : user?.school?.name || 'School'),
+//         'Notes': record.message || '',
+//         'Raw Timestamp': record.scan_time || record.time || record.created_at
+//       }))
+
+//       // Create filename with current filters
+//       const now = new Date()
+//       const timestamp = now.toISOString().split('T')[0]
+//       let filename = `attendance-report-${timestamp}`
+      
+//       // Add filter info to filename
+//       if (statusFilter !== 'all') {
+//         filename += `-${statusFilter}`
+//       }
+//       if (gradeFilter) {
+//         filename += `-grade-${gradeFilter}`
+//       }
+//       if (dateRange.from === dateRange.to) {
+//         filename += `-${dateRange.from}`
+//       } else {
+//         filename += `-${dateRange.from}-to-${dateRange.to}`
+//       }
+
+//       // Create Excel content using CSV format that Excel can read
+//       const headers = Object.keys(exportData[0])
+//       const csvContent = [
+//         // Add title rows
+//         [`Attendance Report - ${isCompanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
+//         [`Generated: ${now.toLocaleString()}`],
+//         [`Date Range: ${dateRange.from} to ${dateRange.to}`],
+//         [`Filters: Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
+//         [`Total Records: ${filteredData.length}`],
+//         [], // Empty row
+//         headers, // Column headers
+//         ...exportData.map(row => headers.map(header => row[header] || ''))
+//       ].map(row => 
+//         row.map(cell => 
+//           typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
+//             ? `"${cell.replace(/"/g, '""')}"` 
+//             : cell
+//         ).join(',')
+//       ).join('\n')
+
+//       // Create and download the file
+//       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+//       const link = document.createElement('a')
+//       const url = URL.createObjectURL(blob)
+//       link.setAttribute('href', url)
+//       link.setAttribute('download', `${filename}.csv`)
+//       link.style.visibility = 'hidden'
+//       document.body.appendChild(link)
+//       link.click()
+//       document.body.removeChild(link)
+//       URL.revokeObjectURL(url)
+
+//       // Show success message
+//       alert(`Exported ${filteredData.length} attendance records to ${filename}.csv`)
+
+//     } catch (error) {
+//       console.error('Export error:', error)
+//       alert('Failed to export attendance data. Please try again.')
+//     } finally {
+//       setExporting(false)
+//     }
+//   }
+
+//   const loadTimeSettings = async () => {
+//     try {
+//       const schoolId = user?.school_id || user?.SchoolID
+//       if (!schoolId) return
+
+//       const response = await fetch(`/api/school-settings?school_id=${schoolId}&type=time`)
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         setTimeSettings(result.settings)
+//       }
+//     } catch (error) {
+//       console.error('Error loading time settings:', error)
+//     }
+//   }
+
+// // Add this function in AttendanceTabMobileResponsive
+// const loadAbsentStudents = async () => {
+//   if (isCompanyAdmin) return
+  
+//   try {
+//     const schoolId = user?.school_id || user?.SchoolID
+//     if (!schoolId) return
+
+//     const response = await fetch('/api/students', {
+//       method: 'POST',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: JSON.stringify({
+//         action: 'get_absent_students',
+//         school_id: schoolId,
+//         date: dateRange.to || new Date().toISOString().split('T')[0]
+//       })
+//     })
+
+//     if (response.ok) {
+//       const result = await response.json()
+//       if (result.success) {
+//         setAbsentStudents(result.absent_students || [])
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error loading absent students:', error)
+//     // Fallback: calculate absent students from existing data
+//     calculateAbsentStudents()
+//   }
+// }
+
+// // Add this fallback calculation function
+// const calculateAbsentStudents = async () => {
+//   try {
+//     const schoolId = user?.school_id || user?.SchoolID
+//     if (!schoolId) return
+
+//     // Get all active students
+//     const studentsResponse = await fetch(`/api/students?school_id=${schoolId}&active_only=true`)
+//     if (!studentsResponse.ok) return
+
+//     const studentsResult = await studentsResponse.json()
+//     if (!studentsResult.success) return
+
+//     const allStudents = studentsResult.data || []
+    
+//     // Get unique student IDs who were present today
+//     const presentStudentIds = new Set(
+//       attendanceData
+//         .filter(record => {
+//           const recordDate = new Date(record.scan_time || record.time || record.created_at).toDateString()
+//           const today = new Date().toDateString()
+//           return recordDate === today
+//         })
+//         .map(record => record.student_id)
+//     )
+
+//     // Students who are not in the present list are absent
+//     const absentStudentsList = allStudents.filter(student => 
+//       !presentStudentIds.has(student.student_id || student.id)
+//     )
+
+//     setAbsentStudents(absentStudentsList)
+//   } catch (error) {
+//     console.error('Error calculating absent students:', error)
+//   }
+// }
+
+//   const loadAvailableGrades = async () => {
+//     try {
+//       const schoolId = user?.school_id || user?.SchoolID
+//       if (!schoolId) return
+
+//       const response = await fetch(`/api/students?school_id=${schoolId}&type=grades`)
+//       const result = await response.json()
+      
+//       if (result.success) {
+//         setAvailableGrades(result.grades || [])
+//       }
+//     } catch (error) {
+//       console.error('Error loading grades:', error)
+//     }
+//   }
+
+//   const refreshAttendance = async () => {
+//     setLoading(true)
+//     setError(null)
+    
+//     try {
+//       const params = new URLSearchParams({
+//         type: 'real-time'
+//       })
+      
+//       if (dateRange.from) {
+//         params.append('date_from', dateRange.from)
+//       }
+//       if (dateRange.to) {
+//         params.append('date_to', dateRange.to)
+//       }
+      
+//       if (!isCompanyAdmin && (user?.school_id || user?.SchoolID)) {
+//         params.append('school_id', user.school_id || user.SchoolID)
+//       }
+
+//       if (gradeFilter && gradeFilter.trim() !== '') {
+//         // URL encode the grade value to handle spaces and special characters
+//         const encodedGrade = encodeURIComponent(gradeFilter.trim())
+//         params.append('grade', encodedGrade)
+//         console.log('Adding grade filter:', gradeFilter, '-> encoded:', encodedGrade)
+//       }
+
+//       const response = await fetch(`/api/analytics?${params}`)
+      
+//       if (!response.ok) {
+//         throw new Error(`HTTP error! status: ${response.status}`)
+//       }
+      
+//       const data = await response.json()
+      
+//       if (data.success) {
+//         if (data.current_activity && Array.isArray(data.current_activity)) {
+//           let formattedData = data.current_activity.map(record => ({
+//             id: record.attendance_id,
+//             studentName: record.student_name,
+//             student_name: record.student_name,
+//             grade: record.grade,
+//             status: record.status,
+//             time: record.scan_time,
+//             scan_time: record.scan_time,
+//             scanTime: record.scan_time,
+//             created_at: record.created_at,
+//             school_name: record.school_name,
+//             school_id: record.school_id,
+//             statusLabel: record.statusLabel,
+//             statusType: record.statusType,
+//             message: record.message
+//           }))
+          
+//           formattedData.sort((a, b) => {
+//             const timeA = new Date(a.scan_time || a.created_at)
+//             const timeB = new Date(b.scan_time || b.created_at)
+//             return timeB - timeA
+//           })
+          
+//           setAttendanceData(formattedData)
+//         } else {
+//           setAttendanceData([])
+//         }
+//       } else {
+//         setError(data.error || 'Failed to fetch attendance data')
+//         setAttendanceData([])
+//       }
+//     } catch (error) {
+//       console.error('Error refreshing attendance:', error)
+//       setError(error.message)
+//       setAttendanceData([])
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   useEffect(() => {
+//     if (dateRange.from && dateRange.to) {
+//       refreshAttendance()
+//     }
+//   }, [dateRange.from, dateRange.to, gradeFilter])
+
+//   // Filter data based on status and grade filters
+// const filteredData = attendanceFilter === 'present' 
+//   ? attendanceData.filter(record => {
+//       // Status filter
+//       const statusMatch = statusFilter === 'all' || (
+//         timeSettings && (
+//           (statusFilter === 'late' && record.statusType === 'late') ||
+//           (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
+//           (statusFilter === 'early-departure' && record.statusType === 'early-departure')
+//         )
+//       )
+
+//       // Grade filter
+//       const gradeMatch = !gradeFilter || record.grade === gradeFilter
+
+//       return statusMatch && gradeMatch
+//     })
+//   : absentStudents.filter(student => {
+//       // Grade filter for absent students
+//       const gradeMatch = !gradeFilter || student.grade === gradeFilter
+//       return gradeMatch
+//     })
+
+//   // Get status counts for filter buttons
+//   const getStatusCounts = () => {
+//     if (!attendanceData || attendanceData.length === 0) {
+//       return { all: 0, late: 0, 'on-time': 0, 'early-departure': 0 }
+//     }
+
+//     return {
+//       all: filteredData.length,
+//       late: filteredData.filter(r => r.statusType === 'late').length,
+//       'on-time': filteredData.filter(r => 
+//         r.statusType === 'on-time' || r.statusType === 'early-arrival'
+//       ).length,
+//       'early-departure': filteredData.filter(r => r.statusType === 'early-departure').length
+//     }
+//   }
+
+//   // Utility functions for status badges (add these if missing from your utils)
+//   const getStatusBadgeClasses = (statusType) => {
+//     switch (statusType) {
+//       case 'late':
+//         return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800'
+//       case 'on-time':
+//       case 'early-arrival':
+//         return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800'
+//       case 'early-departure':
+//         return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800'
+//       default:
+//         return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800'
+//     }
+//   }
+
+//   const getStatusIcon = (statusType) => {
+//     switch (statusType) {
+//       case 'late':
+//         return '🔴'
+//       case 'on-time':
+//       case 'early-arrival':
+//         return '🟢'
+//       case 'early-departure':
+//         return '🟠'
+//       default:
+//         return '⚪'
+//     }
+//   }
+
+//   const statusCounts = getStatusCounts()
+
+//   const formatTime = (timestamp) => {
+//     if (!timestamp) return 'No time'
+//     try {
+//       return new Date(timestamp).toLocaleTimeString('en-US', {
+//         hour: '2-digit',
+//         minute: '2-digit',
+//         second: '2-digit',
+//         hour12: false
+//       })
+//     } catch (e) {
+//       return 'Invalid time'
+//     }
+//   }
+
+//   const formatDate = (timestamp) => {
+//     if (!timestamp) return 'No date'
+//     try {
+//       return new Date(timestamp).toLocaleDateString('en-US', {
+//         year: 'numeric',
+//         month: '2-digit',
+//         day: '2-digit'
+//       })
+//     } catch (e) {
+//       return 'Invalid date'
+//     }
+//   }
+
+//   return (
+//     <div>
+//       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+//         <div>
+//           <h3 className="text-lg font-semibold text-gray-900">
+//             {isCompanyAdmin ? 'Network Attendance Records' : 'Recent Attendance'}
+//           </h3>
+//           {timeSettings && (
+//             <p className="text-sm text-gray-600 mt-1">
+//               Late after {timeSettings.late_arrival_time} • Early before {timeSettings.early_departure_time}
+//             </p>
+//           )}
+//         </div>
+//         <div className="flex flex-col sm:flex-row gap-2">
+//           <input
+//             type="date"
+//             value={dateRange.from}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             max={dateRange.to}
+//           />
+//           <input
+//             type="date"
+//             value={dateRange.to}
+//             onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+//             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+//             min={dateRange.from}
+//             max={new Date().toISOString().split('T')[0]}
+//           />
+//           <button 
+//             onClick={refreshAttendance}
+//             disabled={loading}
+//             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+//           >
+//             {loading ? 'Loading...' : 'Refresh'}
+//           </button>
+//           <button 
+//             onClick={exportToExcel}
+//             disabled={exporting || filteredData.length === 0}
+//             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+//           >
+//             {exporting ? 'Exporting...' : 'Export Excel'}
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Enhanced Filter Section with Grade Filter */}
+//       <div className="mb-4 bg-white p-4 rounded-lg shadow border space-y-4">
+//         {/* Grade Filter */}
+//         {availableGrades.length > 0 && (
+//           <div>
+//             <label className="block text-sm font-medium text-gray-700 mb-2">
+//               Filter by Grade
+//             </label>
+//             <select
+//               value={gradeFilter}
+//               onChange={(e) => setGradeFilter(e.target.value)}
+//               className="block w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+//             >
+//               <option value="">All Grades</option>
+//               {availableGrades.map((grade) => (
+//                 <option key={grade} value={grade}>
+//                   Grade {grade}
+//                 </option>
+//               ))}
+//             </select>
+//           </div>
+//         )}
+
+//         {/* Present/Absent Filter - Only for school admins */}
+//         {!isCompanyAdmin && (
+//           <div>
+//             <label className="block text-sm font-medium text-gray-700 mb-2">
+//               View Students
+//             </label>
+//             <div className="flex flex-wrap gap-2">
+//               <button
+//                 onClick={() => {
+//                   setAttendanceFilter('present')
+//                   setStatusFilter('all')
+//                 }}
+//                 className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+//                   attendanceFilter === 'present' 
+//                     ? 'bg-green-100 text-green-800 border-2 border-green-300' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 Present Today ({stats?.present_today || 0})
+//               </button>
+//               <button
+//                 onClick={() => setAttendanceFilter('absent')}
+//                 className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+//                   attendanceFilter === 'absent' 
+//                     ? 'bg-red-100 text-red-800 border-2 border-red-300' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 Absent Today ({absentStudents.length})
+//               </button>
+//             </div>
+//           </div>
+//         )}
+
+//         {/* Status Filter Buttons */}
+//         {timeSettings && statusCounts.all > 0 && (
+//           <div>
+//             <label className="block text-sm font-medium text-gray-700 mb-2">
+//               Filter by Status
+//             </label>
+//             <div className="flex flex-wrap gap-2">
+//               <button
+//                 onClick={() => setStatusFilter('all')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'all' 
+//                     ? 'bg-blue-100 text-blue-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 All ({statusCounts.all})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('on-time')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'on-time' 
+//                     ? 'bg-green-100 text-green-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🟢 On Time ({statusCounts['on-time']})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('late')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'late' 
+//                     ? 'bg-red-100 text-red-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🔴 Late ({statusCounts.late})
+//               </button>
+//               <button
+//                 onClick={() => setStatusFilter('early-departure')}
+//                 className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+//                   statusFilter === 'early-departure' 
+//                     ? 'bg-orange-100 text-orange-800' 
+//                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+//                 }`}
+//               >
+//                 🟠 Early Out ({statusCounts['early-departure']})
+//               </button>
+//             </div>
+//           </div>
+//         )}
+
+//         {/* Export Summary */}
+//         {filteredData.length > 0 && (
+//           <div className="text-sm text-gray-600 border-t pt-3">
+//             Ready to export: {filteredData.length} records
+//             {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
+//             {gradeFilter && ` (Grade ${gradeFilter})`}
+//             {dateRange.from === dateRange.to 
+//               ? ` for ${formatDate(dateRange.from)}`
+//               : ` from ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+//             }
+//           </div>
+//         )}
+//       </div>
+
+//       {error && (
+//         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+//           Error: {error}
+//         </div>
+//       )}
+
+//       {/* Attendance Table */}
+//       <div className="overflow-x-auto -mx-4 sm:mx-0">
+//         <div className="inline-block min-w-full align-middle">
+//           <div className="bg-white rounded-lg shadow overflow-hidden">
+//             <table className="min-w-full divide-y divide-gray-200">
+//               <thead className="bg-gray-50">
+//                 <tr>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Student
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Grade
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+//                     Status
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Time
+//                   </th>
+//                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+//                     Date
+//                   </th>
+//                   {isCompanyAdmin && (
+//                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+//                       School
+//                     </th>
+//                   )}
+//                 </tr>
+//               </thead>
+// <tbody className="bg-white divide-y divide-gray-200">
+//                 {filteredData && filteredData.length > 0 ? (
+//                   filteredData.slice(0, 50).map((record, index) => (
+//                     <tr key={record.id || record.student_id || record.attendance_id || index} className="hover:bg-gray-50 transition-colors">
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <div className="text-sm font-medium text-gray-900">
+//                           {attendanceFilter === 'present' 
+//                             ? (record.studentName || record.student_name || 'Unknown Student')
+//                             : (record.name || 'Unknown Student')
+//                           }
+//                         </div>
+//                         <div className="text-xs text-gray-500">
+//                           {attendanceFilter === 'present' ? (
+//                             <div className="sm:hidden">
+//                               {formatTime(record.scan_time || record.time || record.created_at)}
+//                             </div>
+//                           ) : (
+//                             <span className="text-red-600">No attendance today</span>
+//                           )}
+//                         </div>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4">
+//                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+//                           {(attendanceFilter === 'present' ? record.grade : record.grade) 
+//                             ? `Grade ${attendanceFilter === 'present' ? record.grade : record.grade}` 
+//                             : 'N/A'
+//                           }
+//                         </span>
+//                       </td>
+//                       <td className="px-3 sm:px-6 py-4">
+//                         {attendanceFilter === 'present' ? (
+//                           <div className="space-y-1">
+//                             {record.statusType && timeSettings ? (
+//                               <span className={getStatusBadgeClasses(record.statusType)}>
+//                                 {getStatusIcon(record.statusType)} {record.statusLabel}
+//                               </span>
+//                             ) : (
+//                               <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+//                                 record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+//                                 record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+//                                 'bg-gray-100 text-gray-800'
+//                               }`}>
+//                                 {record.status === 'IN' ? 'Check In' : 
+//                                  record.status === 'OUT' ? 'Check Out' : 
+//                                  record.status || 'Unknown'}
+//                               </span>
+//                             )}
+//                             {record.message && (
+//                               <div className="text-xs text-gray-500 lg:hidden">
+//                                 {record.message}
+//                               </div>
+//                             )}
+//                           </div>
+//                         ) : (
+//                           <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+//                             Absent
+//                           </span>
+//                         )}
+//                       </td>
+//                       {attendanceFilter === 'present' && (
+//                         <>
+//                           <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                             {formatTime(record.scan_time || record.time || record.created_at)}
+//                           </td>
+//                           <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+//                             {formatDate(record.scan_time || record.time || record.created_at)}
+//                           </td>
+//                         </>
+//                       )}
+//                       {isCompanyAdmin && (
+//                         <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+//                           {attendanceFilter === 'present' 
+//                             ? (record.school_name || 'Unknown School')
+//                             : (record.school_name || 'Unknown School')
+//                           }
+//                         </td>
+//                       )}
+//                     </tr>
+//                   ))
+//                 ) : (
+//                   <tr>
+//                     <td colSpan={
+//                       isCompanyAdmin 
+//                         ? (attendanceFilter === 'present' ? "6" : "4")
+//                         : (attendanceFilter === 'present' ? "5" : "3")
+//                     } className="px-6 py-12 text-center">
+//                       <div className="text-gray-500">
+//                         {loading ? (
+//                           <div className="flex items-center justify-center">
+//                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+//                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                             </svg>
+//                             Loading attendance records...
+//                           </div>
+//                         ) : (
+//                           <div>
+//                             <div className="text-gray-400 text-4xl mb-2">📊</div>
+//                             <p className="font-medium">
+//                               {attendanceFilter === 'absent' 
+//                                 ? `No absent students found${gradeFilter ? ` in Grade ${gradeFilter}` : ''}`
+//                                 : (statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
+//                                    `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`
+//                                   )
+//                               }
+//                             </p>
+//                             <p className="text-sm mt-1">
+//                               {dateRange.from === dateRange.to ? 
+//                                 `No records for ${formatDate(dateRange.from)}` :
+//                                 `No records between ${formatDate(dateRange.from)} and ${formatDate(dateRange.to)}`
+//                               }
+//                             </p>
+//                           </div>
+//                         )}
+//                       </div>
+//                     </td>
+//                   </tr>
+//                 )}
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+
+//         {/* Summary info */}
+//         {filteredData && filteredData.length > 0 && (
+//           <div className="mt-4 text-sm text-gray-600 text-center">
+//             Showing {Math.min(50, filteredData.length)} of {filteredData.length} {attendanceFilter} records
+//             {(statusFilter !== 'all' || gradeFilter) && (
+//               <span className="block mt-1 text-xs">
+//                 Filtered by: {statusFilter !== 'all' && statusFilter.replace('-', ' ')}{statusFilter !== 'all' && gradeFilter && ' and '}{gradeFilter && `Grade ${gradeFilter}`}
+//               </span>
+//             )}
+//             {filteredData.length > 50 && (
+//               <span className="block mt-1 text-xs">
+//                 Only showing first 50 records. Use filters to narrow results or export all data.
+//               </span>
+//             )}
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   )
+// }
+function AttendanceTabMobileResponsive({ attendance, isCompanyAdmin, user, stats }) {
+  const [dateRange, setDateRange] = useState({
+    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0]
+  })
+  const [attendanceData, setAttendanceData] = useState(attendance)
+  const [timeSettings, setTimeSettings] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [gradeFilter, setGradeFilter] = useState('')
+  const [availableGrades, setAvailableGrades] = useState([])
+  const [exporting, setExporting] = useState(false)
+  const [attendanceFilter, setAttendanceFilter] = useState('present')
+  const [absentStudents, setAbsentStudents] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [paginationInfo, setPaginationInfo] = useState({})
+  
+  // Search-related state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState(null)
+  const [showSearch, setShowSearch] = useState(false)
+
+  useEffect(() => {
+    setAttendanceData(attendance)
+    loadTimeSettings()
+    loadAvailableGrades()
+    if (!isCompanyAdmin) {
+      loadAbsentStudents()
+    }
+  }, [attendance])
+
+// Page size options
+const pageSizeOptions = [
+  { value: 20, label: '20' },
+  { value: 50, label: '50' },
+  { value: 100, label: '100' },
+  { value: 200, label: '200' },
+  { value: 'all', label: 'All' }
+]
+  // Excel Export Function
+  const exportToExcel = async () => {
+    if (!filteredData.length) {
+      alert('No data to export')
+      return
+    }
+
+    setExporting(true)
+    
+    try {
+      // Prepare the data for export
+      const exportData = filteredData.map(record => ({
+        'Student Name': record.studentName || record.student_name || 'Unknown Student',
+        'Grade': record.grade || 'N/A',
+        'Status': record.status === 'IN' ? 'Check In' : record.status === 'OUT' ? 'Check Out' : record.status || 'Unknown',
+        'Enhanced Status': record.statusLabel || (record.status === 'IN' ? 'Check In' : 'Check Out'),
+        'Date': formatDate(record.scan_time || record.time || record.created_at),
+        'Time': formatTime(record.scan_time || record.time || record.created_at),
+        'School': record.school_name || (isCompanyAdmin ? 'Unknown School' : user?.school?.name || 'School'),
+        'Notes': record.message || '',
+        'Raw Timestamp': record.scan_time || record.time || record.created_at
+      }))
+
+      // Create filename with current filters
+      const now = new Date()
+      const timestamp = now.toISOString().split('T')[0]
+      let filename = `attendance-report-${timestamp}`
+      
+      // Add filter info to filename
+      if (statusFilter !== 'all') {
+        filename += `-${statusFilter}`
+      }
+      if (gradeFilter) {
+        filename += `-grade-${gradeFilter}`
+      }
+      if (dateRange.from === dateRange.to) {
+        filename += `-${dateRange.from}`
+      } else {
+        filename += `-${dateRange.from}-to-${dateRange.to}`
+      }
+
+      // Create Excel content using CSV format that Excel can read
+      const headers = Object.keys(exportData[0])
+      const csvContent = [
+        // Add title rows
+        [`Attendance Report - ${isCompanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
+        [`Generated: ${now.toLocaleString()}`],
+        [`Date Range: ${dateRange.from} to ${dateRange.to}`],
+        [`Filters: Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
+        [`Total Records: ${filteredData.length}`],
+        [], // Empty row
+        headers, // Column headers
+        ...exportData.map(row => headers.map(header => row[header] || ''))
+      ].map(row => 
+        row.map(cell => 
+          typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
+            ? `"${cell.replace(/"/g, '""')}"` 
+            : cell
+        ).join(',')
+      ).join('\n')
+
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `${filename}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      // Show success message
+      alert(`Exported ${filteredData.length} attendance records to ${filename}.csv`)
+
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export attendance data. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const loadTimeSettings = async () => {
+    try {
+      const schoolId = user?.school_id || user?.SchoolID
+      if (!schoolId) return
+
+      const response = await fetch(`/api/school-settings?school_id=${schoolId}&type=time`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setTimeSettings(result.settings)
+      }
+    } catch (error) {
+      console.error('Error loading time settings:', error)
+    }
+  }
+
+  // Add this function in AttendanceTabMobileResponsive
+  const loadAbsentStudents = async () => {
+    if (isCompanyAdmin) return
+    
+    try {
+      const schoolId = user?.school_id || user?.SchoolID
+      if (!schoolId) return
+
+      const response = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_absent_students',
+          school_id: schoolId,
+          date: dateRange.to || new Date().toISOString().split('T')[0]
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setAbsentStudents(result.absent_students || [])
+        }
+      }
+    } catch (error) {
+      console.error('Error loading absent students:', error)
+      // Fallback: calculate absent students from existing data
+      calculateAbsentStudents()
+    }
+  }
+
+  // Add this fallback calculation function
+  const calculateAbsentStudents = async () => {
+    try {
+      const schoolId = user?.school_id || user?.SchoolID
+      if (!schoolId) return
+
+      // Get all active students
+      const studentsResponse = await fetch(`/api/students?school_id=${schoolId}&active_only=true`)
+      if (!studentsResponse.ok) return
+
+      const studentsResult = await studentsResponse.json()
+      if (!studentsResult.success) return
+
+      const allStudents = studentsResult.data || []
+      
+      // Get unique student IDs who were present today
+      const presentStudentIds = new Set(
+        attendanceData
+          .filter(record => {
+            const recordDate = new Date(record.scan_time || record.time || record.created_at).toDateString()
+            const today = new Date().toDateString()
+            return recordDate === today
+          })
+          .map(record => record.student_id)
+      )
+
+      // Students who are not in the present list are absent
+      const absentStudentsList = allStudents.filter(student => 
+        !presentStudentIds.has(student.student_id || student.id)
+      )
+
+      setAbsentStudents(absentStudentsList)
+    } catch (error) {
+      console.error('Error calculating absent students:', error)
+    }
+  }
+
+  const loadAvailableGrades = async () => {
+    try {
+      const schoolId = user?.school_id || user?.SchoolID
+      if (!schoolId) return
+
+      const response = await fetch(`/api/students?school_id=${schoolId}&type=grades`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setAvailableGrades(result.grades || [])
+      }
+    } catch (error) {
+      console.error('Error loading grades:', error)
+    }
+  }
+
+  // Search function
+  const searchStudent = async () => {
+    if (!searchQuery.trim()) {
+      setSearchError('Please enter a student name or student code')
+      return
+    }
+
+    setSearchLoading(true)
+    setSearchError(null)
+    setSearchResults(null)
+
+    try {
+      const schoolId = user?.school_id || user?.SchoolID
+
+      const response = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'search_student_attendance',
+          query: searchQuery.trim(),
+          date_from: dateRange.from,
+          date_to: dateRange.to,
+          school_id: !isCompanyAdmin ? schoolId : undefined
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSearchResults(result.data)
+        setShowSearch(true)
+      } else {
+        setSearchError(result.error || 'Student not found')
+      }
+    } catch (error) {
+      console.error('Search error:', error)
+      setSearchError('Failed to search student. Please try again.')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Clear search results
+  const clearSearch = () => {
+    setSearchQuery('')
+    setSearchResults(null)
+    setSearchError(null)
+    setShowSearch(false)
+  }
+
+  // Handle page size change
+const handlePageSizeChange = (newPageSize) => {
+  setPageSize(newPageSize)
+  setCurrentPage(1)
+}
+
+// Handle page change
+const handlePageChange = (newPage) => {
+  setCurrentPage(newPage)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// Reset to page 1 when filters change
+const resetPagination = () => {
+  setCurrentPage(1)
+}
+
+const handleAttendanceFilterChange = (value) => {
+  setAttendanceFilter(value)
+  resetPagination() // Add this
+}
+
+  const refreshAttendance = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const params = new URLSearchParams({
+        type: 'real-time'
+      })
+      
+      if (dateRange.from) {
+        params.append('date_from', dateRange.from)
+      }
+      if (dateRange.to) {
+        params.append('date_to', dateRange.to)
+      }
+      
+      if (!isCompanyAdmin && (user?.school_id || user?.SchoolID)) {
+        params.append('school_id', user.school_id || user.SchoolID)
+      }
+
+      if (gradeFilter && gradeFilter.trim() !== '') {
+        // URL encode the grade value to handle spaces and special characters
+        const encodedGrade = encodeURIComponent(gradeFilter.trim())
+        params.append('grade', encodedGrade)
+        console.log('Adding grade filter:', gradeFilter, '-> encoded:', encodedGrade)
+      }
+
+      const response = await fetch(`/api/analytics?${params}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        if (data.current_activity && Array.isArray(data.current_activity)) {
+          let formattedData = data.current_activity.map(record => ({
+            id: record.attendance_id,
+            studentName: record.student_name,
+            student_name: record.student_name,
+            grade: record.grade,
+            status: record.status,
+            time: record.scan_time,
+            scan_time: record.scan_time,
+            scanTime: record.scan_time,
+            created_at: record.created_at,
+            school_name: record.school_name,
+            school_id: record.school_id,
+            statusLabel: record.statusLabel,
+            statusType: record.statusType,
+            message: record.message
+          }))
+          
+          formattedData.sort((a, b) => {
+            const timeA = new Date(a.scan_time || a.created_at)
+            const timeB = new Date(b.scan_time || b.created_at)
+            return timeB - timeA
+          })
+          
+          setAttendanceData(formattedData)
+        } else {
+          setAttendanceData([])
+        }
+      } else {
+        setError(data.error || 'Failed to fetch attendance data')
+        setAttendanceData([])
+      }
+    } catch (error) {
+      console.error('Error refreshing attendance:', error)
+      setError(error.message)
+      setAttendanceData([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (dateRange.from && dateRange.to) {
+      refreshAttendance()
+    }
+  }, [dateRange.from, dateRange.to, gradeFilter])
+
+// First, filter the data
+const allFilteredData = attendanceFilter === 'present' 
+  ? attendanceData.filter(record => {
+      // Status filter
+      const statusMatch = statusFilter === 'all' || (
+        timeSettings && (
+          (statusFilter === 'late' && record.statusType === 'late') ||
+          (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
+          (statusFilter === 'early-departure' && record.statusType === 'early-departure')
+        )
+      )
+
+      // Grade filter
+      const gradeMatch = !gradeFilter || record.grade === gradeFilter
+
+      return statusMatch && gradeMatch
+    })
+  : absentStudents.filter(student => {
+      // Grade filter for absent students
+      const gradeMatch = !gradeFilter || student.grade === gradeFilter
+      return gradeMatch
+    })
+
+// Then apply pagination
+const totalRecordsCount = allFilteredData.length
+const startIndex = pageSize === 'all' ? 0 : (currentPage - 1) * pageSize
+const endIndex = pageSize === 'all' ? totalRecordsCount : startIndex + parseInt(pageSize)
+const filteredData = pageSize === 'all' ? allFilteredData : allFilteredData.slice(startIndex, endIndex)
+
+// Calculate pagination info
+const totalPages = pageSize === 'all' ? 1 : Math.ceil(totalRecordsCount / pageSize)
+const hasPrevious = currentPage > 1
+const hasMore = currentPage < totalPages
+
+  // Get status counts for filter buttons
+  const getStatusCounts = () => {
+    if (!attendanceData || attendanceData.length === 0) {
+      return { all: 0, late: 0, 'on-time': 0, 'early-departure': 0 }
+    }
+
+    return {
+      all: filteredData.length,
+      late: filteredData.filter(r => r.statusType === 'late').length,
+      'on-time': filteredData.filter(r => 
+        r.statusType === 'on-time' || r.statusType === 'early-arrival'
+      ).length,
+      'early-departure': filteredData.filter(r => r.statusType === 'early-departure').length
+    }
+  }
+
+  // Utility functions for status badges (add these if missing from your utils)
+  const getStatusBadgeClasses = (statusType) => {
+    switch (statusType) {
+      case 'late':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800'
+      case 'on-time':
+      case 'early-arrival':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800'
+      case 'early-departure':
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800'
+      default:
+        return 'inline-flex px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusIcon = (statusType) => {
+    switch (statusType) {
+      case 'late':
+        return '🔴'
+      case 'on-time':
+      case 'early-arrival':
+        return '🟢'
+      case 'early-departure':
+        return '🟠'
+      default:
+        return '⚪'
+    }
+  }
+
+  const statusCounts = getStatusCounts()
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return 'No time'
+    try {
+      return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+    } catch (e) {
+      return 'Invalid time'
+    }
+  }
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'No date'
+    try {
+      return new Date(timestamp).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    } catch (e) {
+      return 'Invalid date'
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {showSearch ? 'Student Search Results' : (isCompanyAdmin ? 'Network Attendance Records' : 'Recent Attendance')}
+          </h3>
+          {timeSettings && !showSearch && (
+            <p className="text-sm text-gray-600 mt-1">
+              Late after {timeSettings.late_arrival_time} • Early before {timeSettings.early_departure_time}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {!showSearch && (
+            <>
+              <input
+                type="date"
+                value={dateRange.from}
+                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                max={dateRange.to}
+              />
+              <input
+                type="date"
+                value={dateRange.to}
+                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min={dateRange.from}
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <button 
+                onClick={refreshAttendance}
+                disabled={loading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+              >
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+              <button 
+                onClick={exportToExcel}
+                disabled={exporting || filteredData.length === 0}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+              >
+                {exporting ? 'Exporting...' : 'Export Excel'}
+              </button>
+            </>
+          )}
+          <button 
+            onClick={() => setShowSearch(!showSearch)}
+            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm font-medium transition-colors"
+          >
+            {showSearch ? 'Back to Overview' : 'Search Student'}
+          </button>
+        </div>
+      </div>
+
+      {/* Search Section */}
+      {showSearch && (
+        <div className="mb-6 bg-white p-6 rounded-lg shadow border">
+          <h4 className="text-lg font-medium text-gray-900 mb-4">Search Student Attendance</h4>
+          
+          <div className="flex flex-col sm:flex-row gap-4 mb-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Student Name or Student Code
+              </label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Enter student name or student code..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                onKeyPress={(e) => e.key === 'Enter' && searchStudent()}
+              />
+            </div>
+            <div className="flex gap-2 items-end">
+              <button
+                onClick={searchStudent}
+                disabled={searchLoading || !searchQuery.trim()}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              >
+                {searchLoading ? 'Searching...' : 'Search'}
+              </button>
+              {(searchResults || searchError) && (
+                <button
+                  onClick={clearSearch}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 font-medium transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <div className="text-sm text-gray-600">
+            Search date range: {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
+          </div>
+        </div>
+      )}
+
+      {/* Search Error */}
+      {searchError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          {searchError}
+        </div>
+      )}
+
+      {/* Search Results */}
+      {showSearch && searchResults && (
+        <div className="mb-6 bg-white rounded-lg shadow overflow-hidden">
+          {/* Student Info Header */}
+          <div className="bg-gray-50 px-6 py-4 border-b">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">
+                  {searchResults.student?.name || 'Unknown Student'}
+                </h4>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-1">
+                  {searchResults.student?.student_code && (
+                    <span>Code: <span className="font-medium">{searchResults.student.student_code}</span></span>
+                  )}
+                  {searchResults.student?.grade && (
+                    <span>Grade: <span className="font-medium">{searchResults.student.grade}</span></span>
+                  )}
+                  {searchResults.student?.school_name && (
+                    <span>School: <span className="font-medium">{searchResults.student.school_name}</span></span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Attendance Summary */}
+          {searchResults.summary && (
+            <div className="px-6 py-4 bg-blue-50 border-b">
+              <h5 className="text-sm font-medium text-gray-700 mb-2">Attendance Summary</h5>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-green-600">{searchResults.summary.present_days || 0}</div>
+                  <div className="text-gray-600">Present Days</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-red-600">{searchResults.summary.absent_days || 0}</div>
+                  <div className="text-gray-600">Absent Days</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-orange-600">{searchResults.summary.late_arrivals || 0}</div>
+                  <div className="text-gray-600">Late Arrivals</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-blue-600">
+                    {searchResults.summary.attendance_rate ? `${searchResults.summary.attendance_rate}%` : 'N/A'}
+                  </div>
+                  <div className="text-gray-600">Attendance Rate</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Detailed Records */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {searchResults.records && searchResults.records.length > 0 ? (
+                  searchResults.records.map((record, index) => (
+                    <tr key={record.id || index} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {formatDate(record.scan_time || record.date)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {record.scan_time ? formatTime(record.scan_time) : '-'}
+                      </td>
+                      <td className="px-6 py-4">
+                        {record.statusType && timeSettings ? (
+                          <span className={getStatusBadgeClasses(record.statusType)}>
+                            {getStatusIcon(record.statusType)} {record.statusLabel}
+                          </span>
+                        ) : (
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+                            record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+                            record.status === 'ABSENT' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {record.status === 'IN' ? 'Check In' : 
+                             record.status === 'OUT' ? 'Check Out' : 
+                             record.status === 'ABSENT' ? 'Absent' :
+                             record.status || 'Unknown'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {record.type || (record.status === 'IN' ? 'Arrival' : record.status === 'OUT' ? 'Departure' : '-')}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {record.message || record.notes || '-'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-12 text-center">
+                      <div className="text-gray-500">
+                        <div className="text-gray-400 text-4xl mb-2">📅</div>
+                        <p className="font-medium">No attendance records found</p>
+                        <p className="text-sm mt-1">
+                          No records between {formatDate(dateRange.from)} and {formatDate(dateRange.to)}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Overview Content (only show when not searching) */}
+      {!showSearch && (
+        <>
+          {/* Enhanced Filter Section with Grade Filter */}
+          <div className="mb-4 bg-white p-4 rounded-lg shadow border space-y-4">
+            {/* Grade Filter */}
+            {availableGrades.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filter by Grade
+                </label>
+                <select
+                  value={gradeFilter}
+                  onChange={(e) => setGradeFilter(e.target.value)}
+                  className="block w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="">All Grades</option>
+                  {availableGrades.map((grade) => (
+                    <option key={grade} value={grade}>
+                      {grade}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Present/Absent Filter - Only for school admins */}
+            {!isCompanyAdmin && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  View Students
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      setAttendanceFilter('present')
+                      setStatusFilter('all')
+                    }}
+                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                      attendanceFilter === 'present' 
+                        ? 'bg-green-100 text-green-800 border-2 border-green-300' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Present Today ({stats?.present_today || 0})
+                  </button>
+                  <button
+                    onClick={() => setAttendanceFilter('absent')}
+                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                      attendanceFilter === 'absent' 
+                        ? 'bg-red-100 text-red-800 border-2 border-red-300' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Absent Today ({absentStudents.length})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Status Filter Buttons */}
+            {timeSettings && statusCounts.all > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filter by Status
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                      statusFilter === 'all' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All ({statusCounts.all})
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('on-time')}
+                    className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                      statusFilter === 'on-time' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    🟢 On Time ({statusCounts['on-time']})
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('late')}
+                    className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                      statusFilter === 'late' 
+                        ? 'bg-red-100 text-red-800' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    🔴 Late ({statusCounts.late})
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('early-departure')}
+                    className={`px-3 py-1 text-sm rounded-full font-medium transition-colors ${
+                      statusFilter === 'early-departure' 
+                        ? 'bg-orange-100 text-orange-800' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    🟠 Early Out ({statusCounts['early-departure']})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Export Summary */}
+            {filteredData.length > 0 && (
+              <div className="text-sm text-gray-600 border-t pt-3">
+                Ready to export: {filteredData.length} records
+                {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
+                {gradeFilter && ` (Grade ${gradeFilter})`}
+                {dateRange.from === dateRange.to 
+                  ? ` for ${formatDate(dateRange.from)}`
+                  : ` from ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+                }
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              Error: {error}
+            </div>
+          )}
+          {/* Pagination Controls */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Items per page:</label>
+              <select 
+                value={pageSize} 
+                onChange={(e) => handlePageSizeChange(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-sm"
+              >
+                {pageSizeOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Page navigation - only show if not showing all */}
+            {pageSize !== 'all' && totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={!hasPrevious || loading}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                >
+                  Previous
+                </button>
+                
+                <span className="text-sm text-gray-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                
+                <button 
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={!hasMore || loading}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Attendance Table */}
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle">
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Student
+                      </th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Grade
+                      </th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                        Time
+                      </th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                        Date
+                      </th>
+                      {isCompanyAdmin && (
+                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                          School
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                   {filteredData && filteredData.length > 0 ? (
+                      filteredData.map((record, index) => (
+                        <tr key={record.id || record.student_id || record.attendance_id || index} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-3 sm:px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {attendanceFilter === 'present' 
+                                ? (record.studentName || record.student_name || 'Unknown Student')
+                                : (record.name || 'Unknown Student')
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {attendanceFilter === 'present' ? (
+                                <div className="sm:hidden">
+                                  {formatTime(record.scan_time || record.time || record.created_at)}
+                                </div>
+                              ) : (
+                                <span className="text-red-600">No attendance today</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 sm:px-6 py-4">
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {(attendanceFilter === 'present' ? record.grade : record.grade) 
+                                ? `${attendanceFilter === 'present' ? record.grade : record.grade}` 
+                                : 'N/A'
+                              }
+                            </span>
+                          </td>
+                          <td className="px-3 sm:px-6 py-4">
+                            {attendanceFilter === 'present' ? (
+                              <div className="space-y-1">
+                                {record.statusType && timeSettings ? (
+                                  <span className={getStatusBadgeClasses(record.statusType)}>
+                                    {getStatusIcon(record.statusType)} {record.statusLabel}
+                                  </span>
+                                ) : (
+                                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+                                    record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {record.status === 'IN' ? 'Check In' : 
+                                     record.status === 'OUT' ? 'Check Out' : 
+                                     record.status || 'Unknown'}
+                                  </span>
+                                )}
+                                {record.message && (
+                                  <div className="text-xs text-gray-500 lg:hidden">
+                                    {record.message}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Absent
+                              </span>
+                            )}
+                          </td>
+                          {attendanceFilter === 'present' && (
+                            <>
+                              <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                                {formatTime(record.scan_time || record.time || record.created_at)}
+                              </td>
+                              <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                                {formatDate(record.scan_time || record.time || record.created_at)}
+                              </td>
+                            </>
+                          )}
+                          {isCompanyAdmin && (
+                            <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+                              {attendanceFilter === 'present' 
+                                ? (record.school_name || 'Unknown School')
+                                : (record.school_name || 'Unknown School')
+                              }
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={
+                          isCompanyAdmin 
+                            ? (attendanceFilter === 'present' ? "6" : "4")
+                            : (attendanceFilter === 'present' ? "5" : "3")
+                        } className="px-6 py-12 text-center">
+                          <div className="text-gray-500">
+                            {loading ? (
+                              <div className="flex items-center justify-center">
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Loading attendance records...
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="text-gray-400 text-4xl mb-2">📊</div>
+                                <p className="font-medium">
+                                  {attendanceFilter === 'absent' 
+                                    ? `No absent students found${gradeFilter ? ` in Grade ${gradeFilter}` : ''}`
+                                    : (statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
+                                       `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`
+                                      )
+                                  }
+                                </p>
+                                <p className="text-sm mt-1">
+                                  {dateRange.from === dateRange.to ? 
+                                    `No records for ${formatDate(dateRange.from)}` :
+                                    `No records between ${formatDate(dateRange.from)} and ${formatDate(dateRange.to)}`
+                                  }
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Summary info */}
+            {/* Footer Pagination */}
+            {filteredData && filteredData.length > 0 && (
+              <div className="mt-4 text-sm text-gray-600 text-center">
+                <div>
+                  Showing {startIndex + 1} to {Math.min(endIndex, totalRecordsCount)} of {totalRecordsCount} {attendanceFilter} records
+                  {(statusFilter !== 'all' || gradeFilter) && (
+                    <span className="block mt-1 text-xs">
+                      Filtered by: {statusFilter !== 'all' && statusFilter.replace('-', ' ')}{statusFilter !== 'all' && gradeFilter && ' and '}{gradeFilter && `Grade ${gradeFilter}`}
+                    </span>
+                  )}
+                </div>
+                
+                {/* Bottom pagination controls for convenience */}
+                {pageSize !== 'all' && totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-2 mt-3">
+                    <button 
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={!hasPrevious}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+                    >
+                      Previous
+                    </button>
+                    
+                    <span className="text-sm text-gray-600">
+                      {currentPage} of {totalPages}
+                    </span>
+                    
+                    <button 
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={!hasMore}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export { StudentsTab }
+
+function SchoolsNetworkTab({ companyId, user }) {
+  const [schools, setSchools] = useState([])
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingSchool, setEditingSchool] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [schoolToDelete, setSchoolToDelete] = useState(null)
+
+  const [newSchool, setNewSchool] = useState({
+    name: '',
+    location: '',
+    machineId: '',
+    adminUsername: '',
+    adminPassword: '',
+    adminEmail: ''
+  })
+  const [showPasswords, setShowPasswords] = useState({
+  adminPassword: false
+})
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }))
+  }
+
+  const [createdSchoolCredentials, setCreatedSchoolCredentials] = useState(null)
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [error, setError] = useState('')
+
+  const [schoolForm, setSchoolForm] = useState({
+    name: '',
+    location: '',
+    machineId: '',
+    contactEmail: '',
+    contactPhone: '',
+    status: 'active'
+  })
+
+  // Get company ID from props or user object
+  const effectiveCompanyId = companyId || user?.company_id || user?.CompanyID || ''
+
+  useEffect(() => {
+    fetchSchoolsData()
+  }, [effectiveCompanyId])
+
+  const fetchSchoolsData = async () => {
+    try {
+      setLoading(true)
+      const url = effectiveCompanyId 
+        ? `/api/analytics?type=schools&company_id=${effectiveCompanyId}`
+        : `/api/analytics?type=schools`
+      
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.success && data.schools) {
+        setSchools(data.schools)
+      }
+    } catch (error) {
+      console.error('Error fetching schools data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateSchool = async () => {
+    try {
+      setActionLoading(true)
+      
+      const response = await fetch('/api/schools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSchool)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setCreatedSchoolCredentials(result.data.admin_credentials)
+        setShowCredentialsModal(true)
+        setShowAddModal(false)
+        setNewSchool({
+          name: '',
+          location: '',
+          machineId: '',
+          adminUsername: '',
+          adminPassword: '',
+          adminEmail: ''
+        })
+        
+        fetchSchoolsData()
+      } else {
+        setError(result.error || 'Failed to create school')
+      }
+    } catch (error) {
+      setError('Failed to create school: ' + error.message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleEditSchool = async () => {
+    if (!editingSchool) return
+
+    try {
+      setActionLoading(true)
+      
+      const response = await fetch(`/api/schools?school_id=${editingSchool.school_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: schoolForm.name,
+          location: schoolForm.location,
+          machineId: schoolForm.machineId,
+          status: schoolForm.status
+        })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setShowEditModal(false)
+        setEditingSchool(null)
+        fetchSchoolsData()
+        alert('School updated successfully!')
+      } else {
+        alert('Failed to update school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Update school error:', error)
+      alert('Failed to update school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDisableSchool = async (schoolId, schoolName) => {
+    if (!confirm(`Are you sure you want to disable "${schoolName}"?`)) {
+      return
+    }
+
+    setActionLoading(true)
+    
+    try {
+      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        fetchSchoolsData()
+        alert(`${schoolName} has been disabled successfully`)
+      } else {
+        alert('Failed to disable school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Disable school error:', error)
+      alert('Failed to disable school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleEnableSchool = async (schoolId, schoolName) => {
+    if (!confirm(`Enable "${schoolName}"?`)) {
+      return
+    }
+
+    setActionLoading(true)
+    
+    try {
+      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        fetchSchoolsData()
+        alert(`${schoolName} has been enabled successfully`)
+      } else {
+        alert('Failed to enable school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Enable school error:', error)
+      alert('Failed to enable school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const openDeleteModal = (school) => {
+    setSchoolToDelete(school)
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteSchool = async (forceDelete = false) => {
+    if (!schoolToDelete) return
+
+    setActionLoading(true)
+    
+    try {
+      const response = await fetch(`/api/schools?school_id=${schoolToDelete.school_id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_delete: forceDelete })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setShowDeleteModal(false)
+        setSchoolToDelete(null)
+        fetchSchoolsData()
+        alert(result.message || 'School deleted successfully')
+      } else {
+        alert('Failed to delete school: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Delete school error:', error)
+      alert('Failed to delete school: Network error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const openEditModal = (school) => {
+    setEditingSchool(school)
+    setSchoolForm({
+      name: school.name || '',
+      location: school.location || '',
+      machineId: school.machine_id || '',
+      status: school.status || 'active'
+    })
+    setShowEditModal(true)
+  }
+
+  const closeModals = () => {
+    setShowAddModal(false)
+    setShowEditModal(false)
+    setShowDeleteModal(false)
+    setShowCredentialsModal(false)
+    setEditingSchool(null)
+    setSchoolToDelete(null)
+    setShowPasswords({ adminPassword: false })
+    setError('')
+  }
+
+  if (loading) {
+    return <div className="p-6 text-center">Loading schools network...</div>
+  }
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold">Schools Network Management</h2>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button 
+            onClick={fetchSchoolsData}
+            disabled={actionLoading}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm"
+          >
+            Refresh
+          </button>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            disabled={actionLoading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
+            Add New School
+          </button>
+        </div>
+      </div>
+
+      {/* Network Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Total Schools</h3>
+          <p className="text-lg sm:text-2xl font-bold text-blue-600">{schools.length}</p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Active</h3>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {schools.filter(s => s.status === 'active').length}
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Online</h3>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {schools.filter(s => s.sync_agent?.connection_status === 'Online').length}
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Inactive</h3>
+          <p className="text-lg sm:text-2xl font-bold text-red-600">
+            {schools.filter(s => s.status === 'inactive').length}
+          </p>
+        </div>
+      </div>
+
+      {/* Schools Management Table */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4 border-b">
+          <h3 className="text-base sm:text-lg font-semibold">Schools List</h3>
+        </div>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">School</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Location</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Students</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {schools.length > 0 ? schools.map((school) => (
+                  <tr key={school.school_id} className={school.status === 'inactive' ? 'bg-gray-50' : ''}>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{school.name}</div>
+                      <div className="text-xs text-gray-500">ID: {school.school_id}</div>
+                      <div className="text-xs text-gray-500 sm:hidden">
+                        {school.location} • {school.students?.active || 0}/{school.students?.total || 0} students
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                      {school.location}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm text-gray-900 hidden sm:table-cell">
+                      {school.students?.active || 0}/{school.students?.total || 0}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div className="space-y-1">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          school.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {school.status || 'active'}
+                        </span>
+                        <div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            school.sync_agent?.connection_status === 'Online' ? 'bg-green-100 text-green-800' :
+                            school.sync_agent?.connection_status === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {school.sync_agent?.connection_status || 'Unknown'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-sm font-medium">
+                      <div className="flex flex-col gap-1">
+                        <button 
+                          onClick={() => openEditModal(school)}
+                          disabled={actionLoading}
+                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 text-xs"
+                        >
+                          Edit
+                        </button>
+                        {school.status === 'active' ? (
+                          <button 
+                            onClick={() => handleDisableSchool(school.school_id, school.name)}
+                            disabled={actionLoading}
+                            className="text-orange-600 hover:text-orange-900 disabled:opacity-50 text-xs"
+                          >
+                            Disable
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleEnableSchool(school.school_id, school.name)}
+                            disabled={actionLoading}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50 text-xs"
+                          >
+                            Enable
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => openDeleteModal(school)}
+                          disabled={actionLoading}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50 text-xs"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                      No schools found. Click "Add New School" to get started.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Add School Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Add New School</h3>
+            
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                {error}
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">School Information</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="School Name *"
+                    value={newSchool.name}
+                    onChange={(e) => setNewSchool({...newSchool, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Location *"
+                    value={newSchool.location}
+                    onChange={(e) => setNewSchool({...newSchool, location: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Machine ID (optional)"
+                    value={newSchool.machineId}
+                    onChange={(e) => setNewSchool({...newSchool, machineId: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Admin Account</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Admin Username (auto-generates if empty)"
+                    value={newSchool.adminUsername}
+                    onChange={(e) => setNewSchool({...newSchool, adminUsername: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="relative">
+                    <input
+                      type={showPasswords.adminPassword ? "text" : "password"}
+                      placeholder="Admin Password (auto-generates if empty)"
+                      value={newSchool.adminPassword}
+                      onChange={(e) => setNewSchool({...newSchool, adminPassword: e.target.value})}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility('adminPassword')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPasswords.adminPassword ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464a10.007 10.007 0 00-5.411 8.536M9.878 9.878L12 12m6.121-6.121A10.007 10.007 0 0112 5c-4.478 0-8.268 2.943-9.543 7a9.97 9.97 0 011.563 3.029m5.858.908l4.242 4.242m0 0a3 3 0 01-4.243-4.243m4.243 4.243L21.536 21.536" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="Admin Email (optional)"
+                    value={newSchool.adminEmail}
+                    onChange={(e) => setNewSchool({...newSchool, adminEmail: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  If username or password are left empty, they will be auto-generated and shown after creation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                onClick={closeModals}
+                className="w-full px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSchool}
+                disabled={actionLoading || !newSchool.name || !newSchool.location}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? 'Creating...' : 'Create School'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit School Modal */}
+      {showEditModal && editingSchool && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Edit School: {editingSchool.name}</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">School Name</label>
+                <input
+                  type="text"
+                  value={schoolForm.name}
+                  onChange={(e) => setSchoolForm({...schoolForm, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={schoolForm.location}
+                  onChange={(e) => setSchoolForm({...schoolForm, location: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+                <input
+                  type="text"
+                  value={schoolForm.machineId}
+                  onChange={(e) => setSchoolForm({...schoolForm, machineId: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={schoolForm.status}
+                  onChange={(e) => setSchoolForm({...schoolForm, status: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                onClick={closeModals}
+                className="w-full px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSchool}
+                disabled={actionLoading || !schoolForm.name || !schoolForm.location}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && schoolToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <div className="text-center mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Delete School</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                This action cannot be undone. Choose how to proceed:
+              </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-yellow-800 mb-2">School: {schoolToDelete.name}</h4>
+              <div className="text-sm text-yellow-700 space-y-1">
+                <div>Location: {schoolToDelete.location}</div>
+                <div>Students: {schoolToDelete.students?.total || 0}</div>
+                <div>Status: {schoolToDelete.status}</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <h5 className="font-medium text-orange-800 text-sm mb-1">Soft Delete (Recommended)</h5>
+                <p className="text-xs text-orange-700">
+                  Deactivates the school and admin users. Preserves all data for historical records.
+                </p>
+              </div>
+              
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <h5 className="font-medium text-red-800 text-sm mb-1">Permanent Delete (Destructive)</h5>
+                <p className="text-xs text-red-700">
+                  Completely removes school, students, attendance records, and all related data from the database. This cannot be undone!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-6">
+              <button
+                onClick={() => handleDeleteSchool(false)}
+                disabled={actionLoading}
+                className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Processing...' : 'Soft Delete (Deactivate)'}
+              </button>
+              
+              <button
+                onClick={() => {
+                  if (confirm(`FINAL WARNING: This will permanently delete ALL data for "${schoolToDelete.name}" including students, attendance records, and admin accounts. Type "DELETE" to confirm.`)) {
+                    const userInput = prompt('Type "DELETE" in capital letters to confirm permanent deletion:')
+                    if (userInput === 'DELETE') {
+                      handleDeleteSchool(true)
+                    } else {
+                      alert('Deletion cancelled. You must type "DELETE" exactly to confirm.')
+                    }
+                  }
+                }}
+                disabled={actionLoading}
+                className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Deleting...' : 'Permanent Delete (All Data)'}
+              </button>
+              
+              <button
+                onClick={closeModals}
+                disabled={actionLoading}
+                className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Credentials Display Modal */}
+      {showCredentialsModal && createdSchoolCredentials && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-lg mx-4">
+            <div className="text-center mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">School Created Successfully!</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                The school has been created with an admin account. Please save these credentials securely.
+              </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-yellow-800 mb-3">Admin Login Credentials</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">Username:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.username}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">Password:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.password}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-yellow-700">School ID:</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded border">
+                    {createdSchoolCredentials.school_id}
+                  </span>
+                </div>
+                {createdSchoolCredentials.email && (
+                  <div className="flex justify-between">
+                    <span className="font-medium text-yellow-700">Email:</span>
+                    <span className="font-mono bg-white px-2 py-1 rounded border">
+                      {createdSchoolCredentials.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-700">
+                <strong>Important:</strong> Save these credentials immediately. They will not be shown again. 
+                Share them securely with the school administrator.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  const credentials = `School Admin Login Credentials:
+Username: ${createdSchoolCredentials.username}
+Password: ${createdSchoolCredentials.password}
+School ID: ${createdSchoolCredentials.school_id}
+${createdSchoolCredentials.email ? `Email: ${createdSchoolCredentials.email}` : ''}`
+                  
+                  navigator.clipboard.writeText(credentials).then(() => {
+                    alert('Credentials copied to clipboard!')
+                  })
+                }}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Copy to Clipboard
+              </button>
+              <button
+                onClick={() => {
+                  setShowCredentialsModal(false)
+                  setCreatedSchoolCredentials(null)
+                }}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function SystemMonitorTab({ companyId }) {
+  const [systemData, setSystemData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchSystemData()
+    const interval = setInterval(fetchSystemData, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [companyId])
+
+  const fetchSystemData = async () => {
+    try {
+      setLoading(false) // Don't show loading on refresh
+      const response = await fetch(`/api/analytics?type=sync-performance&company_id=${companyId}`)
+      const data = await response.json()
+      setSystemData(data)
+    } catch (error) {
+      console.error('Error fetching system data:', error)
+    }
+  }
+
+  if (loading) {
+    return <div className="p-6 text-center">Loading system monitor...</div>
+  }
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold">System Performance Monitor</h2>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <span className="text-sm text-gray-500">Auto-refresh: 30s</span>
+          <button 
+            onClick={fetchSystemData}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm"
+          >
+            Refresh Now
+          </button>
+        </div>
+      </div>
+
+      {/* Performance Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Total Agents</h3>
+          <p className="text-lg sm:text-2xl font-bold text-blue-600">
+            {systemData?.performance_metrics?.total_agents || 0}
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Online Agents</h3>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">
+            {systemData?.performance_metrics?.online_agents || 0}
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Avg Error Rate</h3>
+          <p className="text-lg sm:text-2xl font-bold text-red-600">
+            {systemData?.performance_metrics?.avg_error_rate || 0}%
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Syncs/Hour</h3>
+          <p className="text-lg sm:text-2xl font-bold text-purple-600">
+            {Math.round(systemData?.performance_metrics?.avg_syncs_per_hour || 0)}
+          </p>
+        </div>
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-500">Uptime (Avg)</h3>
+          <p className="text-lg sm:text-2xl font-bold text-orange-600">
+            {Math.round(systemData?.performance_metrics?.avg_uptime_hours || 0)}h
+          </p>
+        </div>
+      </div>
+
+      {/* Health Distribution */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-base sm:text-lg font-semibold mb-4">Agent Health Distribution</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">
+              {systemData?.health_distribution?.excellent || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Excellent (90%+)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-blue-600">
+              {systemData?.health_distribution?.good || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Good (70-89%)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600">
+              {systemData?.health_distribution?.fair || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Fair (50-69%)</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl sm:text-2xl font-bold text-red-600">
+              {systemData?.health_distribution?.poor || 0}
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500">Poor (50%)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Agents Detail Table */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4 border-b">
+          <h3 className="text-base sm:text-lg font-semibold">Sync Agents Status</h3>
+        </div>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500">School</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Health Score</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Uptime</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Synced</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Errors</th>
+                  <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Memory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {systemData?.agents?.length > 0 ? systemData.agents.map((agent) => (
+                  <tr key={agent.school_id}>
+                    <td className="px-3 sm:px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">{agent.school_name}</div>
+                      <div className="text-xs text-gray-500 sm:hidden">
+                        Health: {agent.health_score}% • Uptime: {agent.uptime_hours}h
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        agent.connection_status === 'Online' ? 'bg-green-100 text-green-800' :
+                        agent.connection_status === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {agent.connection_status}
+                      </span>
+                      <div className="text-xs text-gray-500 sm:hidden mt-1">
+                        Synced: {agent.total_synced} • Errors: {agent.total_errors}
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.health_score}%</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.uptime_hours}h</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.total_synced}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.total_errors}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-gray-900 hidden sm:table-cell">{agent.memory_usage_mb}MB</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                      No sync agents found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnalyticsTab({ companyId }) {
+  const [activeView, setActiveView] = useState('overview')
+  const [analyticsData, setAnalyticsData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAnalyticsData()
+  }, [activeView, companyId])
+
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams({ type: activeView })
+      
+      if (companyId && companyId !== 'undefined') {
+        params.set('company_id', companyId)
+      }
+      
+      const response = await fetch(`/api/analytics?${params}`)
+      const data = await response.json()
+      setAnalyticsData(data)
+    } catch (error) {
+      console.error('Error fetching analytics data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const views = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'trends', label: 'Trends' },
+    { id: 'students', label: 'Students' },
+    { id: 'real-time', label: 'Real-time' }
+  ]
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold">Analytics Dashboard</h2>
+        <div className="flex flex-wrap gap-2">
+          {views.map(view => (
+            <button
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-sm ${
+                activeView === view.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading analytics...</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {activeView === 'overview' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Schools</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Total:</span>
+                    <span className="font-bold">{analyticsData?.overview?.schools?.total || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Active:</span>
+                    <span className="font-bold text-green-600">{analyticsData?.overview?.schools?.active || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Students</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Total:</span>
+                    <span className="font-bold">{analyticsData?.overview?.students?.total || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Active:</span>
+                    <span className="font-bold text-green-600">{analyticsData?.overview?.students?.active || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Attendance</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Today:</span>
+                    <span className="font-bold text-blue-600">{analyticsData?.overview?.attendance?.today || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>This Week:</span>
+                    <span className="font-bold">{analyticsData?.overview?.attendance?.week || 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeView === 'real-time' && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last Minute</h3>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">
+                  {analyticsData?.live_metrics?.last_minute || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last 5 Minutes</h3>
+                <p className="text-lg sm:text-2xl font-bold text-blue-600">
+                  {analyticsData?.live_metrics?.last_5_minutes || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last 15 Minutes</h3>
+                <p className="text-lg sm:text-2xl font-bold text-purple-600">
+                  {analyticsData?.live_metrics?.last_15_minutes || 0}
+                </p>
+              </div>
+              <div className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-500">Last Hour</h3>
+                <p className="text-lg sm:text-2xl font-bold text-orange-600">
+                  {analyticsData?.live_metrics?.last_hour || 0}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeView === 'trends' && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Attendance Trends</h3>
+              <div className="text-center py-8 text-gray-500">
+                <p>Trends visualization would appear here</p>
+                <p className="text-sm">Connect to chart library for detailed analytics</p>
+              </div>
+            </div>
+          )}
+
+          {activeView === 'students' && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Student Analytics</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-medium mb-2">Top Performers</h4>
+                  <div className="space-y-2">
+                    {Array.from({length: 5}, (_, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span>Student {i + 1}</span>
+                        <span className="text-green-600">{100 - i * 2}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Attendance Patterns</h4>
+                  <div className="text-sm text-gray-600">
+                    <p>Peak hours: 8:00 AM - 9:00 AM</p>
+                    <p>Average daily attendance: 85%</p>
+                    <p>Most active day: Monday</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DatabaseHealthMonitor() {
+  const [healthData, setHealthData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [activeView, setActiveView] = useState('overview')
+
+  const fetchHealthData = async (action = '') => {
+    try {
+      setLoading(true)
+      const url = action ? `/api/health?action=${action}` : '/api/health'
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      setHealthData(data)
+      setError('')
+      setLastUpdated(new Date())
+    } catch (error) {
+      console.error('Health check failed:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const runManualCleanup = async () => {
+    try {
+      setCleanupLoading(true)
+      
+      const maintenanceKey = prompt('Enter maintenance key for cleanup:')
+      if (!maintenanceKey) return
+
+      const response = await fetch('/api/health?action=cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth_key: maintenanceKey })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert('Cleanup completed successfully!')
+        fetchHealthData(activeView === 'detailed' ? 'database' : '')
+      } else {
+        alert('Cleanup failed: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Cleanup failed:', error)
+      alert('Cleanup failed: ' + error.message)
+    } finally {
+      setCleanupLoading(false)
+    }
+  }
+
+  const fetchSessionDetails = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/health?action=monitor')
+      const data = await response.json()
+      
+      setHealthData(data)
+      setError('')
+      setLastUpdated(new Date())
+    } catch (error) {
+      console.error('Session monitoring failed:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const loadData = () => {
+      switch (activeView) {
+        case 'detailed':
+          fetchHealthData('database')
+          break
+        case 'sessions':
+          fetchSessionDetails()
+          break
+        default:
+          fetchHealthData('')
+      }
+    }
+
+    loadData()
+    
+    const interval = setInterval(loadData, 30000)
+    return () => clearInterval(interval)
+  }, [activeView])
+
+  const getHealthColor = (score) => {
+    if (score >= 90) return 'text-green-600 bg-green-100'
+    if (score >= 70) return 'text-yellow-600 bg-yellow-100'
+    if (score >= 50) return 'text-orange-600 bg-orange-100'
+    return 'text-red-600 bg-red-100'
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'healthy': return 'text-green-600 bg-green-100'
+      case 'degraded': return 'text-yellow-600 bg-yellow-100'
+      case 'critical': return 'text-red-600 bg-red-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  if (loading && !healthData) {
+    return (
+      <div className="bg-white p-4 rounded-lg shadow">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Checking system health...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !healthData) {
+    return (
+      <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-medium text-red-800">Health Check Failed</h4>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+          <button 
+            onClick={() => fetchHealthData('')}
+            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!healthData) return null
+
+  return (
+    <div className="space-y-4">
+      {/* View Selector */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Database Health Monitor</h3>
+          <div className="flex items-center space-x-2">
+            <div className="flex rounded-md shadow-sm">
+              <button
+                onClick={() => setActiveView('overview')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'overview'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } rounded-l-md`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveView('detailed')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'detailed'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } -ml-px`}
+              >
+                Detailed
+              </button>
+              <button
+                onClick={() => setActiveView('sessions')}
+                className={`px-3 py-2 text-sm font-medium ${
+                  activeView === 'sessions'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } -ml-px rounded-r-md`}
+              >
+                Sessions
+              </button>
+            </div>
+            <button 
+              onClick={() => fetchHealthData(activeView === 'detailed' ? 'database' : activeView === 'sessions' ? 'monitor' : '')}
+              disabled={loading}
+              className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loading ? 'Checking...' : 'Refresh'}
+            </button>
+            <button
+              onClick={runManualCleanup}
+              disabled={cleanupLoading}
+              className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+            >
+              {cleanupLoading ? 'Cleaning...' : 'Cleanup'}
+            </button>
+          </div>
+        </div>
+
+        {lastUpdated && (
+          <div className="text-xs text-gray-500 text-center">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
+        )}
+      </div>
+
+      {/* Health Status Overview */}
+      {(activeView === 'overview' || activeView === 'detailed') && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">System Status</h4>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${getHealthColor(healthData.health_score || 0)} px-4 py-2 rounded-lg`}>
+                {healthData.health_score || 0}%
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Health Score</div>
+            </div>
+            
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {healthData.performance?.response_time_ms || 'N/A'}ms
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Response Time</div>
+            </div>
+            
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${
+                healthData.database?.status === 'connected' ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {healthData.database?.status === 'connected' ? '✓' : '✗'}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">DB Connection</div>
+            </div>
+            
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${
+                (healthData.connection_pool?.available || healthData.pool_status?.available || 0) > 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {healthData.connection_pool?.available || healthData.pool_status?.available || 0}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">Available Connections</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connection Pool Details */}
+      {(activeView === 'overview' || activeView === 'detailed') && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Connection Pool Status</h4>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {['size', 'available', 'pending', 'keepAlive', 'healthCheck'].map((metric) => {
+              const poolData = healthData.connection_pool || healthData.pool_status || {}
+              let value = poolData[metric] || 0
+              let displayValue = value
+              
+              if (metric === 'keepAlive' || metric === 'healthCheck') {
+                displayValue = value ? '✓' : '✗'
+              }
+              
+              return (
+                <div key={metric}>
+                  <div className={`text-lg font-bold ${
+                    metric === 'available' ? (value > 0 ? 'text-green-600' : 'text-red-600') :
+                    metric === 'keepAlive' || metric === 'healthCheck' ? (value ? 'text-green-600' : 'text-red-600') :
+                    'text-gray-900'
+                  }`}>
+                    {displayValue}
+                  </div>
+                  <div className="text-xs text-gray-600 capitalize">{metric.replace(/([A-Z])/g, ' $1')}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Database Connection Statistics */}
+      {activeView === 'detailed' && healthData.database_connections && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Database Connection Statistics</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-lg font-bold text-gray-900">
+                {healthData.database_connections.total_user_connections || 0}
+              </div>
+              <div className="text-xs text-gray-600">Total Connections</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-lg font-bold text-blue-600">
+                {healthData.database_connections.node_connections || 0}
+              </div>
+              <div className="text-xs text-gray-600">Node.js Connections</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className={`text-lg font-bold ${
+                (healthData.database_connections.idle_15min || 0) > 5 ? 'text-yellow-600' : 'text-green-600'
+              }`}>
+                {healthData.database_connections.idle_15min || 0}
+              </div>
+              <div className="text-xs text-gray-600">Idle 15+ min</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className={`text-lg font-bold ${
+                (healthData.database_connections.idle_30min || 0) > 0 ? 'text-red-600' : 'text-green-600'
+              }`}>
+                {healthData.database_connections.idle_30min || 0}
+              </div>
+              <div className="text-xs text-gray-600">Idle 30+ min</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Sessions */}
+      {activeView === 'sessions' && healthData.active_sessions && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Active Database Sessions</h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Login</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Idle Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {healthData.active_sessions.slice(0, 10).map((session) => (
+                  <tr key={session.session_id} className={session.idle_minutes > 30 ? 'bg-red-50' : session.idle_minutes > 15 ? 'bg-yellow-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {session.session_id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.login_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.program_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className={
+                        session.idle_minutes > 30 ? 'text-red-600 font-bold' :
+                        session.idle_minutes > 15 ? 'text-yellow-600 font-bold' :
+                        'text-green-600'
+                      }>
+                        {session.idle_minutes} min
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {session.status}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {healthData.active_sessions.length > 10 && (
+            <p className="text-sm text-gray-500 mt-2">
+              Showing 10 of {healthData.active_sessions.length} sessions
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Alerts */}
+      {healthData.alerts && healthData.alerts.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">System Alerts</h4>
+          <div className="space-y-2">
+            {healthData.alerts.map((alert, index) => (
+              <div key={index} className={`p-3 rounded-lg text-sm ${
+                alert.level === 'critical' ? 'bg-red-50 text-red-800' : 'bg-yellow-50 text-yellow-800'
+              }`}>
+                <span className="font-medium">{alert.level.toUpperCase()}:</span> {alert.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {healthData.recommendations && healthData.recommendations.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-gray-900 mb-3">Recommendations</h4>
+          <div className="space-y-2">
+            {healthData.recommendations.map((recommendation, index) => (
+              <div key={index} className={`p-3 rounded-lg text-sm ${
+                recommendation.includes('optimal') ? 'bg-green-50 text-green-800' :
+                recommendation.includes('restart') || recommendation.includes('critical') ? 'bg-red-50 text-red-800' :
+                'bg-blue-50 text-blue-800'
+              }`}>
+                {recommendation}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Performance Metrics */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h4 className="font-medium text-gray-900 mb-3">Performance Metrics</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Response Time</div>
+            <div className="text-lg font-bold text-gray-900">
+              {healthData.performance?.response_time_ms || 'N/A'}ms
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Query Timeouts</div>
+            <div className={`text-lg font-bold ${
+              (healthData.performance?.query_timeouts || 0) > 0 ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {healthData.performance?.query_timeouts || 0}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm font-medium text-gray-700">Failed Checks</div>
+            <div className={`text-lg font-bold ${
+              (healthData.performance?.failed_checks || 0) > 0 ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {healthData.performance?.failed_checks || 0}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Errors */}
+      {healthData.detailed_errors && healthData.detailed_errors.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="font-medium text-red-900 mb-3">System Errors</h4>
+          <div className="space-y-2">
+            {healthData.detailed_errors.map((error, index) => (
+              <div key={index} className="bg-red-50 p-3 rounded-lg">
+                <div className="text-sm font-medium text-red-800">
+                  Check #{error.check_index + 1}
+                </div>
+                <div className="text-sm text-red-600">{error.error}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export { DatabaseHealthMonitor }

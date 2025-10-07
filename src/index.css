@@ -1,0 +1,152 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Diamond Attendance Design System - Professional Attendance Management */
+
+@layer base {
+  :root {
+    /* Core Background Colors */
+    --background: black;
+    --foreground: 224 71% 4%;
+
+    /* Card Components */
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+
+    /* Popover Components */
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+
+    /* Diamond Attendance Brand Colors - Based on logo */
+    --primary: 189 100% 56%;  /* Cyan from logo */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 189 100% 46%;
+    --primary-glow: 189 100% 66%;
+
+    /* Secondary Colors - Pink from logo */
+    --secondary: 330 60% 75%;
+    --secondary-foreground: 224 71% 4%;
+
+    /* Muted Colors */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent Colors - Dark blue from logo */
+    --accent: 228 84% 25%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Status Colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Border and Input */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 228 84% 55%;
+
+    /* Component Radius */
+    --radius: 0.75rem;
+
+    /* Custom Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(189 100% 56%), hsl(330 60% 75%));
+    --gradient-dark: linear-gradient(135deg, hsl(228 84% 25%), hsl(189 100% 25%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 14% 98%), hsl(220 14% 96%));
+
+    /* Shadows */
+    --shadow-elegant: 0 10px 30px -10px hsl(228 84% 55% / 0.2);
+    --shadow-card: 0 4px 12px -2px hsl(220 13% 91% / 0.4);
+    --shadow-glow: 0 0 40px hsl(189 100% 56% / 0.3);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Core Background Colors */
+    --background: 224 71% 4%;
+    --foreground: 210 40% 98%;
+
+    /* Card Components */
+    --card: 224 60% 6%;
+    --card-foreground: 210 40% 98%;
+
+    /* Popover Components */
+    --popover: 224 60% 6%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary Brand Colors */
+    --primary: 228 84% 65%;
+    --primary-foreground: 224 71% 4%;
+    --primary-hover: 228 84% 55%;
+
+    /* Secondary Colors */
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted Colors */
+    --muted: 215 25% 15%;
+    --muted-foreground: 217 11% 65%;
+
+    /* Accent Colors */
+    --accent: 189 100% 66%;
+    --accent-foreground: 224 71% 4%;
+
+    /* Status Colors */
+    --success: 142 76% 46%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 45 93% 57%;
+    --warning-foreground: 224 71% 4%;
+    
+    --destructive: 0 84% 70%;
+    --destructive-foreground: 224 71% 4%;
+
+    /* Border and Input */
+    --border: 215 25% 15%;
+    --input: 215 25% 15%;
+    --ring: 228 84% 65%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
