@@ -10,6 +10,57 @@ interface DashboardTabProps {
   schoolTimeSettings: any
 }
 
+// ✅ Helper function to safely format time
+function formatTime(record: any): string {
+  try {
+    // Try all possible timestamp field names
+    const timestamp = record.scan_time || record.scanTime || record.time || 
+                     record.created_at || record.createdAt || record.ScanTime || 
+                     record.CreatedAt
+    
+    if (!timestamp) {
+      return 'Time not available'
+    }
+    
+    const date = new Date(timestamp)
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date for record:', record)
+      return 'Invalid time'
+    }
+    
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    })
+  } catch (error) {
+    console.error('Error formatting time:', error)
+    return 'Time error'
+  }
+}
+
+// ✅ Helper function to safely get student name
+function getStudentName(record: any): string {
+  return record.student_name || record.studentName || record.StudentName || 'Unknown Student'
+}
+
+// ✅ Helper function to safely get school name
+function getSchoolName(record: any): string {
+  return record.school_name || record.schoolName || record.SchoolName || 'Unknown School'
+}
+
+// ✅ Helper function to safely get grade
+function getGrade(record: any): string {
+  return record.grade || record.Grade || 'Grade N/A'
+}
+
+// ✅ Helper function to safely get status
+function getStatus(record: any): string {
+  return record.status || record.Status || 'IN'
+}
+
 function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, schoolTimeSettings }: DashboardTabProps) {
   if (isCompanyAdmin) {
     return (
@@ -22,26 +73,29 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, s
           </div>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
             {attendance && attendance.length > 0 ? (
-              attendance.slice(0, 10).map((record) => (
-                <div key={record.id} className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-100 hover:border-blue-300 transition-all shadow-sm hover:shadow-md">
-                  <div>
-                    <p className="font-bold text-gray-900">👤 {record.student_name}</p>
-                    <p className="text-sm text-gray-600">🏫 {record.school_name || 'Unknown School'}</p>
+              attendance.slice(0, 10).map((record, index) => {
+                const status = getStatus(record)
+                return (
+                  <div key={record.id || record.AttendanceID || index} className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-100 hover:border-blue-300 transition-all shadow-sm hover:shadow-md">
+                    <div>
+                      <p className="font-bold text-gray-900">👤 {getStudentName(record)}</p>
+                      <p className="text-sm text-gray-600">🏫 {getSchoolName(record)}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
+                        status === 'IN' 
+                          ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300' 
+                          : 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-2 border-blue-300'
+                      }`}>
+                        {status === 'IN' ? '✅ Check In' : '🚪 Check Out'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        ⏰ {formatTime(record)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
-                      record.status === 'IN' 
-                        ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300' 
-                        : 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-2 border-blue-300'
-                    }`}>
-                      {record.status === 'IN' ? '✅ Check In' : '🚪 Check Out'}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ⏰ {new Date(record.scan_time || record.created_at).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))
+                )
+              })
             ) : (
               <div className="text-center py-12 text-gray-500">
                 <div className="text-5xl mb-3">📊</div>
@@ -156,26 +210,29 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, s
           </div>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
             {attendance && attendance.length > 0 ? (
-              attendance.map((record) => (
-                <div key={record.id} className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-100 hover:border-blue-300 transition-all shadow-sm hover:shadow-md">
-                  <div>
-                    <p className="font-bold text-gray-900">👤 {record.studentName}</p>
-                    <p className="text-sm text-gray-600">📚 {record.grade || 'Grade N/A'}</p>
+              attendance.map((record, index) => {
+                const status = getStatus(record)
+                return (
+                  <div key={record.id || record.AttendanceID || index} className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-blue-100 hover:border-blue-300 transition-all shadow-sm hover:shadow-md">
+                    <div>
+                      <p className="font-bold text-gray-900">👤 {getStudentName(record)}</p>
+                      <p className="text-sm text-gray-600">📚 {getGrade(record)}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
+                        status === 'IN' 
+                          ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300' 
+                          : 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-2 border-blue-300'
+                      }`}>
+                        {status === 'IN' ? '✅ Check In' : '🚪 Check Out'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        ⏰ {formatTime(record)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
-                      record.status === 'IN' 
-                        ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300' 
-                        : 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-2 border-blue-300'
-                    }`}>
-                      {record.status === 'IN' ? '✅ Check In' : '🚪 Check Out'}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ⏰ {new Date(record.time).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))
+                )
+              })
             ) : (
               <div className="text-center py-12 text-gray-500">
                 <div className="text-5xl mb-3">📊</div>

@@ -25,6 +25,7 @@ import StudentsTab from '../../components/tabs/StudentsTab';
 import UploadStudentsTab from '../../components/tabs/UploadStudentsTab';
 import AttendanceTab from '../../components/tabs/AttendanceTab';
 import SchoolSettingsTab from '../../components/tabs/SchoolSettingsTab';
+import { apiGet } from '@/lib/api';
 
 interface CustomSchoolAdminDashboardProps {
   user: User;
@@ -82,18 +83,35 @@ export default function CustomSchoolAdminDashboard({ user, onLogout }: CustomSch
     setLoading(true);
     try {
       const schoolId = user?.SchoolID || user?.school_id;
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
+      
       const [overviewData, studentsData, attendanceData] = await Promise.all([
-        fetch(`${API_URL}/api/analytics?type=overview&school_id=${schoolId}`).then(r => r.json()),
-        fetch(`${API_URL}/api/students?school_id=${schoolId}&include_stats=true&limit=999999`).then(r => r.json()),
-        fetch(`${API_URL}/api/analytics?type=real-time&school_id=${schoolId}`).then(r => r.json())
+        apiGet(`/api/analytics?type=overview&school_id=${schoolId}`),
+        apiGet(`/api/students?school_id=${schoolId}&include_stats=true&limit=999999`),
+        apiGet(`/api/analytics?type=real-time&school_id=${schoolId}`)
       ]);
 
       let totalStudents = studentsData?.totals?.total_students || studentsData?.data?.length || 0;
       let presentToday = overviewData?.overview?.attendance?.today || 0;
-      let withoutPasswords = studentsData?.data?.filter((s: any) => !s.parent_password_set).length || 0;
+      // ✅ Debug and fix parent password counting
+      console.log('=== DASHBOARD STUDENT SAMPLE ===')
+      if (studentsData?.data?.length > 0) {
+        console.log('First student:', studentsData.data[0])
+        console.log('ParentPasswordSet field:', studentsData.data[0].ParentPasswordSet)
+        console.log('parent_password_set field:', studentsData.data[0].parent_password_set)
+      }
 
+      let withoutPasswords = studentsData?.data?.filter((s: any) => {
+        // Check all possible field names (backend uses PascalCase from SQL)
+        const hasPassword = s.ParentPasswordSet || s.parent_password_set || s.parentPasswordSet
+        const needsSetup = !hasPassword || hasPassword === false || hasPassword === 0
+        return needsSetup
+      }).length || 0;
+
+      console.log('Dashboard stats:', {
+        totalStudents,
+        withoutPasswords,
+        allStudents: studentsData?.data?.length
+      })
       if (studentsData?.data) {
         setStudents(studentsData.data);
       }

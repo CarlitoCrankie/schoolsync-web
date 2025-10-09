@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet, apiPost } from '@/lib/api'
 
 interface AttendanceTabProps {
   attendance: any[]
@@ -143,9 +144,8 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       const schoolId = user?.school_id || user?.SchoolID
       if (!schoolId) return
 
-      const response = await fetch(`/api/school-settings?school_id=${schoolId}&type=time`)
-      const result = await response.json()
-      
+      const result = await apiGet(`/api/school-settings?school_id=${schoolId}&type=time`)
+
       if (result.success) {
         setTimeSettings(result.settings)
       }
@@ -162,28 +162,20 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       const schoolId = user?.school_id || user?.SchoolID
       if (!schoolId) return
 
-      const response = await fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'get_absent_students',
-          school_id: schoolId,
-          date: dateRange.to || new Date().toISOString().split('T')[0]
-        })
-      })
+    const result = await apiPost('/api/students', {
+      action: 'get_absent_students',
+      school_id: schoolId,
+      date: dateRange.to || new Date().toISOString().split('T')[0]
+    })
 
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setAbsentStudents(result.absent_students || [])
+    if (result.success) {
+      setAbsentStudents(result.absent_students || [])
+    }    } catch (error) {
+          console.error('Error loading absent students:', error)
+          // Fallback: calculate absent students from existing data
+          calculateAbsentStudents()
         }
       }
-    } catch (error) {
-      console.error('Error loading absent students:', error)
-      // Fallback: calculate absent students from existing data
-      calculateAbsentStudents()
-    }
-  }
 
   // Add this fallback calculation function
   const calculateAbsentStudents = async () => {
@@ -192,10 +184,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       if (!schoolId) return
 
       // Get all active students
-      const studentsResponse = await fetch(`/api/students?school_id=${schoolId}&active_only=true`)
-      if (!studentsResponse.ok) return
-
-      const studentsResult = await studentsResponse.json()
+      const studentsResult = await apiGet(`/api/students?school_id=${schoolId}&active_only=true`)
       if (!studentsResult.success) return
 
       const allStudents = studentsResult.data || []
@@ -227,9 +216,8 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       const schoolId = user?.school_id || user?.SchoolID
       if (!schoolId) return
 
-      const response = await fetch(`/api/students?school_id=${schoolId}&type=grades`)
-      const result = await response.json()
-      
+      const result = await apiGet(`/api/students?school_id=${schoolId}&type=grades`)
+
       if (result.success) {
         setAvailableGrades(result.grades || [])
       }
@@ -252,23 +240,13 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
     try {
       const schoolId = user?.school_id || user?.SchoolID
 
-      const response = await fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'search_student_attendance',
-          query: searchQuery.trim(),
-          date_from: dateRange.from,
-          date_to: dateRange.to,
-          school_id: !isCompanyAdmin ? schoolId : undefined
-        })
+      const result = await apiPost('/api/students', {
+        action: 'search_student_attendance',
+        query: searchQuery.trim(),
+        date_from: dateRange.from,
+        date_to: dateRange.to,
+        school_id: !isCompanyAdmin ? schoolId : undefined
       })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
 
       if (result.success) {
         setSearchResults(result.data)
@@ -341,16 +319,10 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
         console.log('Adding grade filter:', gradeFilter, '-> encoded:', encodedGrade)
       }
 
-      const response = await fetch(`/api/analytics?${params}`)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      
+      const data = await apiGet(`/api/analytics?${params}`)
+
       if (data.success) {
-        if (data.current_activity && Array.isArray(data.current_activity)) {
+          if (data.current_activity && Array.isArray(data.current_activity)) {
           let formattedData = data.current_activity.map(record => ({
             id: record.attendance_id,
             studentName: record.student_name,

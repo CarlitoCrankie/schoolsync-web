@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api'  
 
 interface StudentsTabProps {
   onRefresh?: () => void
@@ -58,69 +59,133 @@ function StudentsTab({ onRefresh, user }: StudentsTabProps) {
   }
 
   // Load students from API with pagination
-  const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFilter = '', statusFilter = 'all') => {
-    setLoading(true)
-    try {
-      const schoolId = user?.SchoolID || user?.school_id
-      
-      const params = new URLSearchParams({
-        school_id: schoolId,
-        page: page,
-        limit: limit === 'all' ? '999999' : limit,
-        include_stats: 'false'
-      })
-      
-      if (searchTerm.trim()) {
-        params.append('search', searchTerm.trim())
-      }
-      
-      if (gradeFilter) {
-        params.append('grade', gradeFilter)
-      }
-      
-      if (statusFilter === 'active' || statusFilter === 'inactive') {
-        params.append('active_only', statusFilter === 'active' ? 'true' : 'false')
-      } else if (statusFilter === 'active') {
-        params.append('active_only', 'true')
-      }
-      
-      console.log('Loading students with params:', params.toString())
-      
-      const response = await fetch(`/api/students?${params}`)
-      const data = await response.json()
-      
-      if (data.success) {
-        const studentsData = data.data || data.students || []
-        setStudents(studentsData)
-        setTotalStudents(data.totals?.total_students || data.total || studentsData.length)
-        setFilteredTotal(data.totals?.filtered_total || data.total || studentsData.length)
-        setPagination(data.pagination || {})
-        
-        console.log('Students loaded:', {
-          page,
-          limit,
-          total: data.totals?.total_students,
-          filtered: data.totals?.filtered_total,
-          returned: studentsData.length
-        })
-      } else {
-        console.error('Failed to load students:', data.error)
-        setStudents([])
-      }
-    } catch (error) {
-      console.error('Error loading students:', error)
-      setStudents([])
-    } finally {
-      setLoading(false)
+const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFilter = '', statusFilter = 'all') => {
+  setLoading(true)
+  try {
+    const schoolId = user?.SchoolID || user?.school_id
+    
+    const params = new URLSearchParams({
+      school_id: schoolId,
+      page: page.toString(),
+      limit: limit === 'all' ? '999999' : limit.toString(),
+      include_stats: 'false'
+    })
+    
+    if (searchTerm.trim()) {
+      params.append('search', searchTerm.trim())
     }
+    
+    if (gradeFilter) {
+      params.append('grade', gradeFilter)
+    }
+    
+    // ✅ Handle active/inactive filters (sent to backend)
+    if (statusFilter === 'active') {
+      params.append('active_only', 'true')
+      console.log('🔵 Frontend sending: active_only=true')
+    } else if (statusFilter === 'inactive') {
+      params.append('active_only', 'false')
+      console.log('🔴 Frontend sending: active_only=false')
+    } else {
+      console.log('⚪ Frontend sending: no active_only filter')
+    }
+
+    console.log('📤 API Call:', `/api/students?${params.toString()}`)
+
+    console.log('Loading students with params:', params.toString())
+    
+    const data = await apiGet(`/api/students?${params}`)
+    
+    if (data.success) {
+      let studentsData = data.data || data.students || []
+      
+      // ✅ DEBUG: Log first student to see actual field names
+      if (studentsData.length > 0) {
+        console.log('=== FIRST STUDENT SAMPLE ===')
+        console.log('Full student object:', studentsData[0])
+        console.log('Field checks:', {
+          'parent_password_set': studentsData[0].parent_password_set,
+          'parentPasswordSet': studentsData[0].parentPasswordSet,
+          'ParentPasswordSet': studentsData[0].ParentPasswordSet,
+          'parent_password_hash': studentsData[0].parent_password_hash,
+          'ParentID': studentsData[0].ParentID
+        })
+      }
+      
+      console.log(`Total students before filter: ${studentsData.length}, Filter: ${statusFilter}`)
+      
+      // ✅ CLIENT-SIDE FILTER for parent password status
+      if (statusFilter === 'with_password') {
+        const before = studentsData.length
+        studentsData = studentsData.filter((s: any) => {
+          // Check all possible field names
+          const hasPassword = s.ParentPasswordSet || s.parent_password_set || s.parentPasswordSet
+          return hasPassword === true || hasPassword === 1
+        })
+        console.log(`WITH PASSWORD: Before=${before}, After=${studentsData.length}`)
+      } else if (statusFilter === 'without_password') {
+        const before = studentsData.length
+        studentsData = studentsData.filter((s: any) => {
+          // Check all possible field names
+          const hasPassword = s.ParentPasswordSet || s.parent_password_set || s.parentPasswordSet
+          return !hasPassword || hasPassword === false || hasPassword === 0
+        })
+        console.log(`WITHOUT PASSWORD: Before=${before}, After=${studentsData.length}`)
+        
+        // ✅ Log each student to see why they're included/excluded
+        if (studentsData.length === 0 && before > 0) {
+          console.log('❌ All students filtered out! Checking first 3 students:')
+          const allStudents = data.data || data.students || []
+          allStudents.slice(0, 3).forEach((s: any) => {
+            console.log(`Student: ${s.name}, ParentPasswordSet: ${s.ParentPasswordSet}, parent_password_set: ${s.parent_password_set}`)
+          })
+        }
+      }
+      
+      setStudents(studentsData)
+      
+      // ✅ Use correct totals
+      const filteredCount = studentsData.length
+      setTotalStudents(data.totals?.total_students || data.total || filteredCount)
+      setFilteredTotal(filteredCount)
+      
+      // ✅ Adjust pagination
+      const adjustedPagination = {
+        ...data.pagination,
+        total_records: filteredCount,
+        showing_range: {
+          from: 1,
+          to: filteredCount,
+          of: filteredCount
+        }
+      }
+      setPagination(adjustedPagination)
+      
+      console.log('Students loaded and filtered:', {
+        page,
+        limit,
+        total: data.totals?.total_students,
+        filtered: filteredCount,
+        returned: studentsData.length,
+        filter: statusFilter
+      })
+    } else {
+      console.error('Failed to load students:', data.error)
+      setStudents([])
+    }
+  } catch (error) {
+    console.error('Error loading students:', error)
+    setStudents([])
+  } finally {
+    setLoading(false)
   }
+}
 
   // Load grades separately for filter dropdown
   const loadGrades = async () => {
     try {
       const schoolId = user?.SchoolID || user?.school_id
-      const response = await fetch(`/api/students?type=grades&school_id=${schoolId}`)
-      const data = await response.json()
+      const data = await apiGet(`/api/students?type=grades&school_id=${schoolId}`)  // ✅ Use apiGet
       
       if (data.success && data.grades) {
         const uniqueGrades = [...new Set(data.grades)].sort((a, b) => {
@@ -245,27 +310,17 @@ function StudentsTab({ onRefresh, user }: StudentsTabProps) {
     setLoading(true)
     
     try {
-      let response
+      let result
       
       if (modalType === 'add') {
-        response = await fetch('/api/students', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...studentForm,
-            school_id: user.school_id || user.SchoolID,
-            name: studentForm.name.trim()
-          })
+        result = await apiPost('/api/students', {  // ✅ Use apiPost
+          ...studentForm,
+          school_id: user.school_id || user.SchoolID,
+          name: studentForm.name.trim()
         })
       } else if (modalType === 'edit') {
-        response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(studentForm)
-        })
+        result = await apiPut(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, studentForm)  // ✅ Use apiPut
       }
-
-      const result = await response.json()
       
       if (result.success) {
         closeModal()
@@ -286,13 +341,7 @@ function StudentsTab({ onRefresh, user }: StudentsTabProps) {
     setLoading(true)
     
     try {
-      const response = await fetch(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_delete: force })
-      })
-
-      const result = await response.json()
+      const result = await apiDelete(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, { force_delete: force })  // ✅ Use apiDelete
       
       if (result.success) {
         closeModal()
@@ -503,13 +552,21 @@ function StudentsTab({ onRefresh, user }: StudentsTabProps) {
                       {student.grade || 'N/A'}
                     </span>
                     <div className="mt-2">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                        (student.parentPasswordSet || student.parent_password_set) ? 
-                        'bg-green-100 text-green-800 border-2 border-green-300' : 
-                        'bg-yellow-100 text-yellow-800 border-2 border-yellow-300'
-                      }`}>
-                        {(student.parentPasswordSet || student.parent_password_set) ? '✅ Parent OK' : '⚠️ Setup needed'}
-                      </span>
+                      {(() => {
+                        // ✅ Check all possible field names
+                        const hasPassword = student.ParentPasswordSet || student.parent_password_set || student.parentPasswordSet
+                        const hasParent = hasPassword === true || hasPassword === 1
+                        
+                        return (
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            hasParent ? 
+                            'bg-green-100 text-green-800 border-2 border-green-300' : 
+                            'bg-yellow-100 text-yellow-800 border-2 border-yellow-300'
+                          }`}>
+                            {hasParent ? '✅ Parent OK' : '⚠️ Setup needed'}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </td>
                   <td className="px-6 py-4 hidden sm:table-cell">

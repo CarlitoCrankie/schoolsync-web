@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api'
 
 interface SchoolsNetworkTabProps {
   companyId?: string
@@ -63,8 +64,7 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
         ? `/api/analytics?type=schools&company_id=${effectiveCompanyId}`
         : `/api/analytics?type=schools`
       
-      const response = await fetch(url)
-      const data = await response.json()
+      const data = await apiGet(url)  // ✅ Use apiGet
       
       if (data.success && data.schools) {
         setSchools(data.schools)
@@ -80,13 +80,7 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
     try {
       setActionLoading(true)
       
-      const response = await fetch('/api/schools', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSchool)
-      })
-
-      const result = await response.json()
+      const result = await apiPost('/api/schools', newSchool)  // ✅ Use apiPost
 
       if (result.success) {
         setCreatedSchoolCredentials(result.data.admin_credentials)
@@ -118,18 +112,12 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
     try {
       setActionLoading(true)
       
-      const response = await fetch(`/api/schools?school_id=${editingSchool.school_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: schoolForm.name,
-          location: schoolForm.location,
-          machineId: schoolForm.machineId,
-          status: schoolForm.status
-        })
-      })
-
-      const result = await response.json()
+      const result = await apiPut(`/api/schools?school_id=${editingSchool.school_id}`, {
+        name: schoolForm.name,
+        location: schoolForm.location,
+        machineId: schoolForm.machineId,
+        status: schoolForm.status
+      })  // ✅ Use apiPut
       
       if (result.success) {
         setShowEditModal(false)
@@ -155,13 +143,7 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
     setActionLoading(true)
     
     try {
-      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'inactive' })
-      })
-
-      const result = await response.json()
+      const result = await apiPut(`/api/schools?school_id=${schoolId}`, { status: 'inactive' })  // ✅ Use apiPut
       
       if (result.success) {
         fetchSchoolsData()
@@ -185,13 +167,7 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
     setActionLoading(true)
     
     try {
-      const response = await fetch(`/api/schools?school_id=${schoolId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'active' })
-      })
-
-      const result = await response.json()
+      const result = await apiPut(`/api/schools?school_id=${schoolId}`, { status: 'active' })  // ✅ Use apiPut
       
       if (result.success) {
         fetchSchoolsData()
@@ -218,13 +194,7 @@ function SchoolsNetworkTab({ companyId, user }: SchoolsNetworkTabProps) {
     setActionLoading(true)
     
     try {
-      const response = await fetch(`/api/schools?school_id=${schoolToDelete.school_id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_delete: forceDelete })
-      })
-
-      const result = await response.json()
+      const result = await apiDelete(`/api/schools?school_id=${schoolToDelete.school_id}`, { force_delete: forceDelete })  // ✅ Use apiDelete
       
       if (result.success) {
         setShowDeleteModal(false)

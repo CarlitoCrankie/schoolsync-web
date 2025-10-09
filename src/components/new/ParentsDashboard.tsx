@@ -3,6 +3,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Building2, Calendar, Clock, User, LogOut } from 'lucide-react';
 import ParentAttendanceTab from '../tabs/ParentAttendanceTab';
+import { apiPost } from '@/lib/api';
 
 interface User {
   student_id: number;
@@ -98,24 +99,15 @@ export default function ParentDashboard({ user, onLogout }: ParentDashboardProps
     setError('');
 
     try {
-      const response = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'get_student_attendance',
-          student_id: user.student_id,
-          school_id: user.school.id
-        })
+      const result = await apiPost('/api/attendance', {
+        action: 'get_student_attendance',
+        student_id: user.student_id,
+        school_id: user.school.id
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setAttendanceData(result.attendance || []);
-          setStats(result.stats || {});
-        } else {
-          loadMockData();
-        }
+      if (result.success) {
+        setAttendanceData(result.attendance || []);
+        setStats(result.stats || []);
       } else {
         loadMockData();
       }

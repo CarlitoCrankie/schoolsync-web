@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet } from '@/lib/api'
 
 interface SystemMonitorTabProps {
   companyId: string
@@ -19,8 +20,7 @@ function SystemMonitorTab({ companyId }: SystemMonitorTabProps) {
   const fetchSystemData = async () => {
     try {
       setLoading(false) // Don't show loading on refresh
-      const response = await fetch(`/api/analytics?type=sync-performance&company_id=${companyId}`)
-      const data = await response.json()
+      const data = await apiGet(`/api/analytics?type=sync-performance&company_id=${companyId}`)  // ✅ Use apiGet
       setSystemData(data)
     } catch (error) {
       console.error('Error fetching system data:', error)

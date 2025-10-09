@@ -11,22 +11,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
-    // Better HMR handling
     hmr: {
       overlay: true,
     },
     watch: {
-      usePolling: false, // Set to true if on Windows/network drive
+      usePolling: false,
     },
   },
-  // Clear cache on dependency changes
   optimizeDeps: {
     force: false,
   },

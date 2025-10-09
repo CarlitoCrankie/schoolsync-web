@@ -40,6 +40,7 @@ import SchoolSettingsTab from '../tabs/SchoolSettingsTab';
 import SystemMonitorTab from '../tabs/SystemMonitorTab';
 import ThemeManagementTab from '../tabs/ThemeManagementTab';
 import diamondLogo from "/school-logos/diamond-logo.jpg";
+import {apiGet} from '../../lib/api'
 
 interface AdminDashboardProps {
   user: User;
@@ -149,19 +150,12 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
   const loadCompanyAdminData = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-      const [overviewResponse, schoolsResponse, attendanceResponse, syncResponse] = await Promise.all([
-      fetch(`${API_URL}/api/analytics?type=overview`),
-      fetch(`${API_URL}/api/analytics?type=schools`),
-      fetch(`${API_URL}/api/analytics?type=real-time`),
-      fetch(`${API_URL}/api/analytics?type=sync-performance`)
-     ]);
-
-      const overviewData = await overviewResponse.json();
-      const schoolsData = await schoolsResponse.json();
-      const attendanceData = await attendanceResponse.json();
-      const syncData = await syncResponse.json();
+        const [overviewData, schoolsData, attendanceData, syncData] = await Promise.all([
+          apiGet('/api/analytics?type=overview'),
+          apiGet('/api/analytics?type=schools'),
+          apiGet('/api/analytics?type=real-time'),
+          apiGet('/api/analytics?type=sync-performance')
+        ]);
 
       if (overviewData.success && overviewData.overview) {
         const syncAgents = syncData.success ? syncData.performance_metrics : null;
@@ -212,13 +206,10 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       if (!schoolId) {
         throw new Error('School ID not found in user data');
       }
-
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
         const apiCalls = [
-        fetch(`${API_URL}/api/analytics?type=overview&school_id=${schoolId}`).then(r => r.json()).catch(() => ({ success: false })),
-        fetch(`${API_URL}/api/students?school_id=${schoolId}&include_stats=true&limit=999999`).then(r => r.json()).catch(() => ({ success: false })),
-        fetch(`${API_URL}/api/analytics?type=real-time&school_id=${schoolId}`).then(r => r.json()).catch(() => ({ success: false })),
+          apiGet(`/api/analytics?type=overview&school_id=${schoolId}`).catch(() => ({ success: false })),
+          apiGet(`/api/students?school_id=${schoolId}&include_stats=true&limit=999999`).catch(() => ({ success: false })),
+          apiGet(`/api/analytics?type=real-time&school_id=${schoolId}`).catch(() => ({ success: false })),
         ];
 
       const [overviewData, studentsData, attendanceData] = await Promise.all(apiCalls);

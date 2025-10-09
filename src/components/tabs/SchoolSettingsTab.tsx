@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet, apiPost } from '@/lib/api'
 
 interface SchoolSettingsTabProps {
   user: any
@@ -27,9 +28,8 @@ function SchoolSettingsTab({ user }: SchoolSettingsTabProps) {
     try {
       setLoading(true)
       const schoolId = user?.school_id || user?.SchoolID || 2
-      const response = await fetch(`/api/school-settings?school_id=${schoolId}`)
-      const data = await response.json()
-      
+      const data = await apiGet(`/api/school-settings?school_id=${schoolId}`)
+
       if (data.success && data.settings) {
         setSettings({
           late_arrival_time: data.settings.late_arrival_time || '08:30',
@@ -67,17 +67,11 @@ function SchoolSettingsTab({ user }: SchoolSettingsTabProps) {
 
     try {
       const schoolId = user?.school_id || user?.SchoolID || 2
-      const response = await fetch('/api/school-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          school_id: schoolId,
-          ...settings
-        })
+      const result = await apiPost('/api/school-settings', {
+        school_id: schoolId,
+        ...settings
       })
 
-      const result = await response.json()
-      
       if (result.success) {
         setSuccess('Settings saved successfully!')
         setTimeout(() => setSuccess(''), 3000)

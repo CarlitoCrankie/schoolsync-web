@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet } from '@/lib/api'
 
 interface AnalyticsTabProps {
   companyId: string
@@ -24,8 +25,7 @@ function AnalyticsTab({ companyId }: AnalyticsTabProps) {
         params.set('company_id', companyId)
       }
       
-      const response = await fetch(`/api/analytics?${params}`)
-      const data = await response.json()
+      const data = await apiGet(`/api/analytics?${params}`)
       setAnalyticsData(data)
     } catch (error) {
       console.error('Error fetching analytics data:', error)

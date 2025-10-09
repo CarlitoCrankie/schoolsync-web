@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiGet, apiPost } from '@/lib/api'
 
 function DatabaseHealthMonitor() {
   const [healthData, setHealthData] = useState(null)
@@ -14,9 +15,8 @@ function DatabaseHealthMonitor() {
     try {
       setLoading(true)
       const url = action ? `/api/health?action=${action}` : '/api/health'
-      const response = await fetch(url)
-      const data = await response.json()
-      
+      const data = await apiGet(url)
+
       setHealthData(data)
       setError('')
       setLastUpdated(new Date())
@@ -35,14 +35,10 @@ function DatabaseHealthMonitor() {
       const maintenanceKey = prompt('Enter maintenance key for cleanup:')
       if (!maintenanceKey) return
 
-      const response = await fetch('/api/health?action=cleanup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auth_key: maintenanceKey })
+      const result = await apiPost('/api/health?action=cleanup', {
+        auth_key: maintenanceKey
       })
 
-      const result = await response.json()
-      
       if (result.success) {
         alert('Cleanup completed successfully!')
         fetchHealthData(activeView === 'detailed' ? 'database' : '')
@@ -60,9 +56,8 @@ function DatabaseHealthMonitor() {
   const fetchSessionDetails = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/health?action=monitor')
-      const data = await response.json()
-      
+      const data = await apiGet('/api/health?action=monitor')
+
       setHealthData(data)
       setError('')
       setLastUpdated(new Date())

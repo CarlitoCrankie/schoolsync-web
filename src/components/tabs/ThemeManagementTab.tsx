@@ -3,6 +3,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Palette, Save, Eye, Upload, X, Check } from 'lucide-react';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';  // ✅ ADD apiGet and apiDelete
 
 export default function ThemeManagementTab({ companyId }) {
   const [schools, setSchools] = useState([]);
@@ -21,15 +22,14 @@ export default function ThemeManagementTab({ companyId }) {
     loadSchools();
   }, []);
 
+  // ✅ FIXED - Use apiGet instead of fetch
   const loadSchools = async () => {
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${API_URL}/api/schools?company_id=${companyId}`);
-      const data = await response.json();
+      const data = await apiGet(`/api/schools?company_id=${companyId}`);
       
       if (data.success) {
-        setSchools(data.schools || []);
+        setSchools(data.data || []);  // ✅ Changed from data.schools to data.data
       }
     } catch (error) {
       console.error('Error loading schools:', error);
@@ -38,17 +38,16 @@ export default function ThemeManagementTab({ companyId }) {
     }
   };
 
+  // ✅ CORRECT - Already uses apiGet
   const loadSchoolTheme = async (schoolId) => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${API_URL}/api/schools/${schoolId}/theme`);
-      const data = await response.json();
+      const data = await apiGet(`/api/schools/${schoolId}/theme`);
       
-      if (data.success && data.theme?.theme_config) {
+      if (data.success && data.theme) {
         setThemeForm({
-          primaryColor: data.theme.theme_config.primary || '#1e40af',
-          secondaryColor: data.theme.theme_config.secondary || '#dc2626',
-          accentColor: data.theme.theme_config.accent || '#eff6ff',
+          primaryColor: data.theme.primary_color || '#1e40af',
+          secondaryColor: data.theme.secondary_color || '#dc2626',
+          accentColor: data.theme.accent_color || '#eff6ff',
           logoUrl: data.theme.logo_url || ''
         });
       } else {
@@ -67,32 +66,26 @@ export default function ThemeManagementTab({ companyId }) {
 
   const handleSchoolSelect = (school) => {
     setSelectedSchool(school);
-    loadSchoolTheme(school.id);
+    loadSchoolTheme(school.school_id);  // ✅ Changed from school.id to school.school_id
     setPreviewMode(false);
   };
 
+  // ✅ CORRECT - Already uses apiPost
   const handleSaveTheme = async () => {
     if (!selectedSchool) return;
     
     setSaving(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${API_URL}/api/schools/${selectedSchool.id}/theme`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          primaryColor: themeForm.primaryColor,
-          secondaryColor: themeForm.secondaryColor,
-          accentColor: themeForm.accentColor,
-          logoUrl: themeForm.logoUrl
-        })
+      const data = await apiPost(`/api/schools/${selectedSchool.school_id}/theme`, {  // ✅ Changed to school_id
+        primary_color: themeForm.primaryColor,
+        secondary_color: themeForm.secondaryColor,
+        accent_color: themeForm.accentColor,
+        logo_url: themeForm.logoUrl
       });
-      
-      const data = await response.json();
       
       if (data.success) {
         alert('Theme saved successfully!');
-        loadSchools(); // Reload to show updated theme status
+        loadSchools();
       } else {
         alert('Failed to save theme: ' + data.message);
       }
@@ -104,16 +97,12 @@ export default function ThemeManagementTab({ companyId }) {
     }
   };
 
+  // ✅ FIXED - Use apiDelete instead of fetch
   const handleDeleteTheme = async () => {
     if (!selectedSchool || !confirm('Remove custom theme for this school?')) return;
     
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${API_URL}/api/schools/${selectedSchool.id}/theme`, {
-        method: 'DELETE'
-      });
-      
-      const data = await response.json();
+      const data = await apiDelete(`/api/schools/${selectedSchool.school_id}/theme`);  // ✅ Use apiDelete and school_id
       
       if (data.success) {
         alert('Theme removed successfully!');
@@ -159,10 +148,10 @@ export default function ThemeManagementTab({ companyId }) {
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {schools.map(school => (
               <button
-                key={school.id}
+                key={school.school_id}  
                 onClick={() => handleSchoolSelect(school)}
                 className={`w-full text-left p-3 rounded-lg border transition-all ${
-                  selectedSchool?.id === school.id
+                  selectedSchool?.school_id === school.school_id  // ✅ Changed comparisons
                     ? 'border-indigo-500 bg-indigo-50'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}

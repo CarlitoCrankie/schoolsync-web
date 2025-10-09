@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
+import { apiPost } from '@/lib/api'
 
 interface UploadStudentsTabProps {
   user: any
@@ -46,49 +47,43 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
     window.URL.revokeObjectURL(url)
   }
 
-  const handleFileUpload = async (e) => {
-    e.preventDefault()
-    // DEBUG: Let's see what school IDs we have
-    console.log('=== UPLOAD DEBUG ===')
-    console.log('Full user object:', user)
-    console.log('user.school_id:', user.school_id)
-    console.log('user.SchoolID:', user.SchoolID)
-    console.log('user.school?.id:', user.school?.id)
-    console.log('Expected school ID should be:', 34)
-    console.log('===================')
-
-    if (!file) {
-      alert('Please select a file to upload')
-      return
-    }
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('school_id', user.school_id || user.SchoolID || 2)
-
-    setUploading(true)
-    setResults(null)
-
-    try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-      setResults(result)
+    const handleFileUpload = async (e) => {
+      e.preventDefault()
       
-      if (result.success) {
-        onUploadComplete()
-        alert(`Upload successful! ${result.summary?.students_added || 0} students added, ${result.summary?.students_updated || 0} updated, ${result.summary?.parents_created || 0} parent records created.`)
+      if (!file) {
+        alert('Please select a file to upload')
+        return
       }
-    } catch (error) {
-      console.error('Upload error:', error)
-      setResults({ success: false, error: 'Upload failed: Network error' })
-    } finally {
-      setUploading(false)
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('school_id', user.school_id || user.SchoolID || 2)
+
+      setUploading(true)
+      setResults(null)
+
+      try {
+        // Note: For FormData, we still need to use fetch directly
+        // because our apiPost helper uses JSON
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+
+        const result = await response.json()
+        setResults(result)
+        
+        if (result.success) {
+          onUploadComplete()
+          alert(`Upload successful! ${result.summary?.students_added || 0} students added, ${result.summary?.students_updated || 0} updated, ${result.summary?.parents_created || 0} parent records created.`)
+        }
+      } catch (error) {
+        console.error('Upload error:', error)
+        setResults({ success: false, error: 'Upload failed: Network error' })
+      } finally {
+        setUploading(false)
+      }
     }
-  }
 
   return (
     <div className="space-y-6">
