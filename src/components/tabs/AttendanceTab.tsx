@@ -42,13 +42,6 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       setAttendanceData(attendance);
       await loadTimeSettings();
       await loadAvailableGrades();
-      
-      // ✅ Load absent students AFTER attendance data is set
-      if (!isCompanyAdmin && attendance.length > 0) {
-        setTimeout(() => {
-          loadAbsentStudents();
-        }, 100);
-      }
     };
     
     initializeData();
@@ -300,9 +293,17 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       const studentsResult = await apiGet(`/api/students?school_id=${schoolId}&active_only=true&limit=999999`)
       if (!studentsResult.success) return
 
-      const allStudents = studentsResult.data || []
+      // ✅ Filter out any invalid or duplicate students from API response
+      const allStudents = (studentsResult.data || []).filter((student, index, self) => {
+        const studentId = student.student_id || student.id;
+        return (
+          studentId && // Has valid ID
+          student.name && // Has name
+          self.findIndex(s => (s.student_id || s.id) === studentId) === index // First occurrence (dedupe)
+        );
+      });
       
-      console.log(`👥 Total active students in school: ${allStudents.length}`);
+      console.log(`👥 Total active students in school: ${allStudents.length} (after filtering)`);
       
       // ✅ Get unique student IDs who have ANY attendance (IN or OUT) in the date range
       const presentStudentIds = new Set();
@@ -378,7 +379,42 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
         });
       }
       
-      setAbsentStudents(absentStudentsList)
+      // ✅ Check for duplicates and deduplicate
+      const studentIds = absentStudentsList.map(s => s.student_id || s.id);
+      const uniqueIds = new Set(studentIds);
+      
+      if (studentIds.length !== uniqueIds.size) {
+        const duplicateIds = studentIds.filter((id, index) => studentIds.indexOf(id) !== index);
+        const duplicateStudents = absentStudentsList.filter(s => 
+          duplicateIds.includes(s.student_id || s.id)
+        );
+        
+        console.error('⚠️ DUPLICATE STUDENTS IN ABSENT LIST!', {
+          total: studentIds.length,
+          unique: uniqueIds.size,
+          duplicateIds,
+          duplicateStudents: duplicateStudents.map(s => ({
+            id: s.student_id || s.id,
+            name: s.name,
+            grade: s.grade
+          }))
+        });
+      }
+      
+      // ✅ DEDUPLICATE before setting state
+      const uniqueAbsentStudents = Array.from(
+        new Map(
+          absentStudentsList.map(student => [
+            student.student_id || student.id, 
+            student
+          ])
+        ).values()
+      );
+      
+      console.log(`✅ Final absent count after deduplication: ${uniqueAbsentStudents.length}`);
+      
+      setAbsentStudents(uniqueAbsentStudents) // ✅ Use deduplicated list
+      
     } catch (error) {
       console.error('Error calculating absent students:', error)
     }
@@ -598,7 +634,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
   };
 
   // Process all attendance data
-  const dailyAttendanceMap = processDailyAttendance(attendanceData);
+    const dailyAttendanceMap = processDailyAttendance(attendanceData);
 
     // First, filter the data
     const allFilteredData = attendanceFilter === 'present' 
@@ -638,10 +674,8 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
           return gradeMatch
         })
         
-    // ✅ Calculate present/absent counts with detailed tracking
+    // ✅ Calculate present/absent counts - ALWAYS calculate both, regardless of active tab
     const presentCount = (() => {
-      if (attendanceFilter !== 'present') return 0;
-      
       // Get unique students who have ANY record (check-in OR check-out) in the date range
       const uniqueStudents = new Set(
         attendanceData
@@ -658,7 +692,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
         uniqueStudents: uniqueStudents.size,
         gradeFilter,
         dateRange,
-        dailyBreakdown: Array.from(dailyAttendanceMap.values()).slice(0, 5) // Sample
+        currentTab: attendanceFilter
       });
       
       return uniqueStudents.size;
@@ -675,11 +709,27 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
         totalAbsent: absentStudents.length,
         afterGradeFilter: filtered.length,
         gradeFilter,
-        dateRange
+        dateRange,
+        currentTab: attendanceFilter
       });
       
       return filtered.length;
     })();
+
+// ✅ Verification: Present + Absent should equal total students (when no grade filter)
+if (!gradeFilter) {
+  const calculatedTotal = presentCount + absentCount;
+  console.log('🔍 Count Verification:', {
+    present: presentCount,
+    absent: absentCount,
+    sum: calculatedTotal,
+    shouldMatch: 'Total students in top card'
+  });
+  
+  if (Math.abs(calculatedTotal - (presentCount + absentCount)) > 0) {
+    console.warn('⚠️ Count mismatch detected!');
+  }
+}
 
     // ✅ Check if viewing today or different date
     const isViewingToday = dateRange.to === new Date().toISOString().split('T')[0];
