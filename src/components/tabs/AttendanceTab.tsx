@@ -12,8 +12,8 @@ interface AttendanceTabProps {
 
 function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTabProps) {
   const [dateRange, setDateRange] = useState({
-    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
+    from: new Date().toISOString().split('T')[0],  // ✅ Default to today
+    to: new Date().toISOString().split('T')[0]     // ✅ Default to today
   })
   const [attendanceData, setAttendanceData] = useState(attendance)
   const [timeSettings, setTimeSettings] = useState(null)
@@ -38,12 +38,20 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
   const [showSearch, setShowSearch] = useState(false)
 
   useEffect(() => {
-    setAttendanceData(attendance)
-    loadTimeSettings()
-    loadAvailableGrades()
-    if (!isCompanyAdmin) {
-      loadAbsentStudents()
-    }
+    const initializeData = async () => {
+      setAttendanceData(attendance);
+      await loadTimeSettings();
+      await loadAvailableGrades();
+      
+      // ✅ Load absent students AFTER attendance data is set
+      if (!isCompanyAdmin && attendance.length > 0) {
+        setTimeout(() => {
+          loadAbsentStudents();
+        }, 100);
+      }
+    };
+    
+    initializeData();
   }, [attendance])
 
   // Page size options
@@ -55,9 +63,10 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
     { value: 'all', label: 'All' }
   ]
 
-  // Excel Export Function
+  // Excel Export Function// Excel Export Function
   const exportToExcel = async () => {
-    if (!filteredData.length) {
+    // ✅ Use allFilteredData instead of filteredData
+    if (!allFilteredData.length) {
       alert('No data to export')
       return
     }
@@ -65,79 +74,179 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
     setExporting(true)
     
     try {
-      // Prepare the data for export
-      const exportData = filteredData.map(record => ({
-        'Student Name': record.studentName || record.student_name || 'Unknown Student',
-        'Grade': record.grade || 'N/A',
-        'Status': record.status === 'IN' ? 'Check In' : record.status === 'OUT' ? 'Check Out' : record.status || 'Unknown',
-        'Enhanced Status': record.statusLabel || (record.status === 'IN' ? 'Check In' : 'Check Out'),
-        'Date': formatDate(record.scan_time || record.time || record.created_at),
-        'Time': formatTime(record.scan_time || record.time || record.created_at),
-        'School': record.school_name || (isCompanyAdmin ? 'Unknown School' : user?.school?.name || 'School'),
-        'Notes': record.message || '',
-        'Raw Timestamp': record.scan_time || record.time || record.created_at
-      }))
+      let exportData;
+      
+      // ✅ Helper function to calculate weekdays
+      function calculateWeekdays(start, end) {
+        let count = 0;
+        const current = new Date(start);
+        const endDate = new Date(end);
+        
+        while (current <= endDate) {
+          const dayOfWeek = current.getDay();
+          if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday to Friday
+            count++;
+          }
+          current.setDate(current.getDate() + 1);
+        }
+        
+        return count;
+      }
+      
+      // ✅ Handle different export formats for present vs absent
+      if (attendanceFilter === 'present') {
+        // For present students - group by student AND day for detailed tracking
+        const studentDayMap = new Map();
+        
+        allFilteredData.forEach(record => {
+          const studentName = record.studentName || record.student_name || 'Unknown Student';
+          const grade = record.grade || 'N/A';
+          const studentId = record.student_id || record.StudentID;
+          const date = new Date(record.scan_time || record.time || record.created_at);
+          const dateKey = date.toDateString();
+          const key = `${studentId}-${dateKey}`;
+          
+          if (!studentDayMap.has(key)) {
+            studentDayMap.set(key, {
+              name: studentName,
+              grade: grade,
+              studentId: studentId,
+              date: dateKey,
+              checkIns: [],
+              checkOuts: [],
+              statusType: record.statusType,
+              statusLabel: record.statusLabel
+            });
+          }
+          
+          const data = studentDayMap.get(key);
+          
+          // Track all check-in and check-out times
+          if (record.status === 'IN') {
+            data.checkIns.push(formatTime(record.scan_time || record.time || record.created_at));
+          } else if (record.status === 'OUT') {
+            data.checkOuts.push(formatTime(record.scan_time || record.time || record.created_at));
+          }
+        });
+        
+        // Convert to export format with detailed check-in/check-out info
+        exportData = Array.from(studentDayMap.values()).map(day => {
+          const hasCheckOut = day.checkOuts.length > 0;
+          const isIncomplete = day.checkIns.length > 0 && !hasCheckOut;
+          const multipleCheckIns = day.checkIns.length > 1;
+          const multipleCheckOuts = day.checkOuts.length > 1;
+          
+          // Create notes about unusual patterns
+          let notes = [];
+          if (isIncomplete) notes.push('⚠️ No checkout recorded');
+          if (multipleCheckIns) notes.push(`${day.checkIns.length} check-ins (possible duplicates)`);
+          if (multipleCheckOuts) notes.push(`${day.checkOuts.length} check-outs (possible duplicates)`);
+          
+          return {
+            'Student Name': day.name,
+            'Grade': day.grade,
+            'Date': formatDate(day.date),
+            'Check-Ins': day.checkIns.join(', ') || 'None',
+            'Check-Outs': day.checkOuts.join(', ') || 'None',
+            'Total Check-Ins': day.checkIns.length,
+            'Total Check-Outs': day.checkOuts.length,
+            'Completion Status': isIncomplete ? '⚠️ Incomplete (No checkout)' : '✅ Complete',
+            'Attendance Status': day.statusLabel || 'Present',
+            'Notes': notes.join(' • ') || 'Normal'
+          };
+        });
+        
+        // Sort by date then by student name
+        exportData.sort((a, b) => {
+          const dateCompare = new Date(b.Date) - new Date(a.Date);
+          if (dateCompare !== 0) return dateCompare;
+          return a['Student Name'].localeCompare(b['Student Name']);
+        });
+        
+      } else {
+        // For absent students
+        const startDate = new Date(dateRange.from);
+        const endDate = new Date(dateRange.to);
+        const totalWeekdays = calculateWeekdays(startDate, endDate);
+        
+        exportData = allFilteredData.map(student => ({
+          'Student Name': student.name || 'Unknown Student',
+          'Grade': student.grade || 'N/A',
+          'Date Range': `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`,
+          'Total Weekdays': totalWeekdays,
+          'Present Days': 0,
+          'Absent Days': totalWeekdays,
+          'Attendance Rate': '0%',
+          'Status': '❌ No attendance recorded'
+        }));
+      }
 
       // Create filename with current filters
-      const now = new Date()
-      const timestamp = now.toISOString().split('T')[0]
-      let filename = `attendance-report-${timestamp}`
+      const now = new Date();
+      const timestamp = now.toISOString().split('T')[0];
+      let filename = `attendance-${attendanceFilter}-${timestamp}`;
       
-      // Add filter info to filename
       if (statusFilter !== 'all') {
-        filename += `-${statusFilter}`
+        filename += `-${statusFilter}`;
       }
       if (gradeFilter) {
-        filename += `-grade-${gradeFilter}`
-      }
-      if (dateRange.from === dateRange.to) {
-        filename += `-${dateRange.from}`
-      } else {
-        filename += `-${dateRange.from}-to-${dateRange.to}`
+        filename += `-grade-${gradeFilter}`;
       }
 
-      // Create Excel content using CSV format that Excel can read
-      const headers = Object.keys(exportData[0])
+      // Create Excel content using CSV format
+      const headers = Object.keys(exportData[0]);
       const csvContent = [
         // Add title rows
-        [`Attendance Report - ${isCosmpanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
+        [`Attendance Report - ${attendanceFilter.charAt(0).toUpperCase() + attendanceFilter.slice(1)} Students`],
+        [`School: ${isCompanyAdmin ? 'Network Wide' : user?.school?.name || 'School'}`],
         [`Generated: ${now.toLocaleString()}`],
         [`Date Range: ${dateRange.from} to ${dateRange.to}`],
-        [`Filters: Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
-        [`Total Records: ${filteredData.length}`],
+        [`Filters: ${attendanceFilter.toUpperCase()}, Status=${statusFilter}, Grade=${gradeFilter || 'All'}`],
+        [`Total Records: ${exportData.length} ${attendanceFilter === 'present' ? 'student-day records' : 'students'}`],
         [], // Empty row
         headers, // Column headers
-        ...exportData.map(row => headers.map(header => row[header] || ''))
+        ...exportData.map(row => headers.map(header => {
+          const cell = row[header];
+          return cell !== undefined && cell !== null ? cell.toString() : '';
+        }))
       ].map(row => 
         row.map(cell => 
           typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))
             ? `"${cell.replace(/"/g, '""')}"` 
             : cell
         ).join(',')
-      ).join('\n')
+      ).join('\n');
 
       // Create and download the file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `${filename}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${filename}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-      // Show success message
-      alert(`Exported ${filteredData.length} attendance records to ${filename}.csv`)
+      // Show success message with details
+      const uniqueStudents = attendanceFilter === 'present' 
+        ? new Set(exportData.map(row => row['Student Name'])).size
+        : exportData.length;
+      
+      const message = attendanceFilter === 'present'
+        ? `✅ Exported ${exportData.length} student-day records (${uniqueStudents} unique students) to ${filename}.csv`
+        : `✅ Exported ${exportData.length} absent students to ${filename}.csv`;
+      
+      alert(message);
 
     } catch (error) {
-      console.error('Export error:', error)
-      alert('Failed to export attendance data. Please try again.')
+      console.error('Export error:', error);
+      alert('❌ Failed to export attendance data. Please try again.');
     } finally {
-      setExporting(false)
+      setExporting(false);
     }
-  }
+  };
 
   const loadTimeSettings = async () => {
     try {
@@ -155,61 +264,119 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
   }
 
   // Add this function in AttendanceTab
-  const loadAbsentStudents = async () => {
+  const loadAbsentStudents = async (freshAttendanceData = null) => {
     if (isCompanyAdmin) return
     
     try {
       const schoolId = user?.school_id || user?.SchoolID
       if (!schoolId) return
 
-    const result = await apiPost('/api/students', {
-      action: 'get_absent_students',
-      school_id: schoolId,
-      date: dateRange.to || new Date().toISOString().split('T')[0]
-    })
+      console.log('📊 Loading absent students for date range:', dateRange);
 
-    if (result.success) {
-      setAbsentStudents(result.absent_students || [])
-    }    } catch (error) {
-          console.error('Error loading absent students:', error)
-          // Fallback: calculate absent students from existing data
-          calculateAbsentStudents()
-        }
-      }
+      // ✅ Use fresh data if provided, otherwise use state
+      const dataToUse = freshAttendanceData || attendanceData;
+      
+      console.log('📦 Using attendance data length:', dataToUse.length);
 
-  // Add this fallback calculation function
-  const calculateAbsentStudents = async () => {
+      // ✅ ALWAYS calculate locally with fresh data
+      calculateAbsentStudents(dataToUse)
+      
+    } catch (error) {
+      console.error('Error loading absent students:', error)
+      calculateAbsentStudents(freshAttendanceData || attendanceData)
+    }
+  }
+
+  // Update fallback calculation function to accept data parameter
+  const calculateAbsentStudents = async (attendanceDataToUse) => {
     try {
       const schoolId = user?.school_id || user?.SchoolID
       if (!schoolId) return
 
+      console.log('🔄 Calculating absent students locally for date range:', dateRange);
+      console.log('📦 Attendance data to process:', attendanceDataToUse.length, 'records');
+
       // Get all active students
-      const studentsResult = await apiGet(`/api/students?school_id=${schoolId}&active_only=true`)
+      const studentsResult = await apiGet(`/api/students?school_id=${schoolId}&active_only=true&limit=999999`)
       if (!studentsResult.success) return
 
       const allStudents = studentsResult.data || []
       
-      // Get unique student IDs who were present today
-      const presentStudentIds = new Set(
-        attendanceData
-          .filter(record => {
-            const recordDate = new Date(record.scan_time || record.time || record.created_at).toDateString()
-            const today = new Date().toDateString()
-            return recordDate === today
-          })
-          .map(record => record.student_id)
-      )
+      console.log(`👥 Total active students in school: ${allStudents.length}`);
+      
+      // ✅ Get unique student IDs who have ANY attendance (IN or OUT) in the date range
+      const presentStudentIds = new Set();
+      
+      attendanceDataToUse.forEach(record => {
+        const recordDate = new Date(record.scan_time || record.time || record.created_at);
+        const rangeStart = new Date(dateRange.from);
+        const rangeEnd = new Date(dateRange.to);
+        rangeEnd.setHours(23, 59, 59, 999);
+        
+        // ✅ Count ANY status (IN or OUT) as present
+        const hasAttendance = recordDate >= rangeStart && recordDate <= rangeEnd;
+        
+        if (hasAttendance) {
+          const studentId = record.student_id || record.StudentID;
+          if (studentId) {
+            presentStudentIds.add(studentId);
+            
+            // Debug specific student
+            const studentName = record.studentName || record.student_name;
+            if (studentName?.includes('NANA AKUA') || studentName?.includes('Mduho')) {
+              console.log('🔍 Found student in attendance:', {
+                studentId,
+                studentName,
+                status: record.status,
+                scanTime: record.scan_time,
+                inDateRange: hasAttendance
+              });
+            }
+          }
+        }
+      });
 
-      // Students who are not in the present list are absent
-      const absentStudentsList = allStudents.filter(student => 
-        !presentStudentIds.has(student.student_id || student.id)
-      )
+      console.log(`✅ Students with ANY attendance (IN or OUT) in range: ${presentStudentIds.size}`);
+      console.log('Present student IDs sample:', Array.from(presentStudentIds).slice(0, 10));
 
+      // ✅ Students who have NO attendance (neither IN nor OUT) in the date range are absent
+      const absentStudentsList = allStudents.filter(student => {
+        const studentId = student.student_id || student.id;
+        const isAbsent = !presentStudentIds.has(studentId);
+        
+        // Debug specific students
+        if (student.name?.includes('NANA AKUA') || student.name?.includes('Mduho')) {
+          console.log('🔍 Checking student in absent filter:', {
+            studentId,
+            name: student.name,
+            isPresentInSet: presentStudentIds.has(studentId),
+            isAbsent
+          });
+        }
+        
+        return isAbsent;
+      });
+
+      console.log(`❌ Students with NO attendance in range: ${absentStudentsList.length}`);
+      console.log('Sample absent students:', absentStudentsList.slice(0, 5).map(s => s.name));
+      
+      // Verification check
+      const expectedAbsent = allStudents.length - presentStudentIds.size;
+      if (absentStudentsList.length !== expectedAbsent) {
+        console.error('⚠️ MISMATCH in absent calculation!', {
+          totalStudents: allStudents.length,
+          presentStudents: presentStudentIds.size,
+          expectedAbsent,
+          actualAbsent: absentStudentsList.length
+        });
+      }
+      
       setAbsentStudents(absentStudentsList)
     } catch (error) {
       console.error('Error calculating absent students:', error)
     }
   }
+
 
   const loadAvailableGrades = async () => {
     try {
@@ -298,7 +465,8 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
     
     try {
       const params = new URLSearchParams({
-        type: 'real-time'
+        type: 'real-time',
+        limit: '999999'
       })
       
       if (dateRange.from) {
@@ -313,18 +481,23 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       }
 
       if (gradeFilter && gradeFilter.trim() !== '') {
-        // URL encode the grade value to handle spaces and special characters
         const encodedGrade = encodeURIComponent(gradeFilter.trim())
         params.append('grade', encodedGrade)
         console.log('Adding grade filter:', gradeFilter, '-> encoded:', encodedGrade)
       }
 
+      console.log('🔄 Fetching attendance with params:', params.toString());
+
       const data = await apiGet(`/api/analytics?${params}`)
 
       if (data.success) {
-          if (data.current_activity && Array.isArray(data.current_activity)) {
+        if (data.current_activity && Array.isArray(data.current_activity)) {
+          console.log(`✅ Loaded ${data.current_activity.length} attendance records`);
+          
           let formattedData = data.current_activity.map(record => ({
             id: record.attendance_id,
+            student_id: record.student_id,
+            StudentID: record.student_id,
             studentName: record.student_name,
             student_name: record.student_name,
             grade: record.grade,
@@ -347,8 +520,21 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
           })
           
           setAttendanceData(formattedData)
+          
+          // ✅ Calculate absent students with FRESH data immediately
+          if (!isCompanyAdmin && formattedData.length > 0) {
+            console.log('🔄 Calculating absent students with fresh data...');
+            setTimeout(() => {
+              loadAbsentStudents(formattedData); // Pass fresh data
+            }, 100);
+          }
         } else {
           setAttendanceData([])
+          if (!isCompanyAdmin) {
+            setTimeout(() => {
+              loadAbsentStudents([]); // Pass empty array
+            }, 100);
+          }
         }
       } else {
         setError(data.error || 'Failed to fetch attendance data')
@@ -365,38 +551,191 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
 
   useEffect(() => {
     if (dateRange.from && dateRange.to) {
-      refreshAttendance()
+      // Just refresh attendance - it handles absent calculation internally
+      refreshAttendance();
     }
   }, [dateRange.from, dateRange.to, gradeFilter])
 
-  // First, filter the data
-  const allFilteredData = attendanceFilter === 'present' 
-    ? attendanceData.filter(record => {
-        // Status filter
-        const statusMatch = statusFilter === 'all' || (
-          timeSettings && (
-            (statusFilter === 'late' && record.statusType === 'late') ||
-            (statusFilter === 'on-time' && (record.statusType === 'on-time' || record.statusType === 'early-arrival')) ||
-            (statusFilter === 'early-departure' && record.statusType === 'early-departure')
-          )
-        )
+  // ✅ Process attendance records to get detailed daily stats per student
+  const processDailyAttendance = (records) => {
+    const dailyStats = new Map();
+    
+    records.forEach(record => {
+      const studentId = record.student_id || record.StudentID;
+      const date = new Date(record.scan_time || record.created_at).toDateString();
+      const key = `${studentId}-${date}`;
+      
+      if (!dailyStats.has(key)) {
+        dailyStats.set(key, {
+          student_id: studentId,
+          student_name: record.studentName || record.student_name,
+          grade: record.grade,
+          date: date,
+          checkIns: [],
+          checkOuts: [],
+          records: []
+        });
+      }
+      
+      const dayStats = dailyStats.get(key);
+      dayStats.records.push(record);
+      
+      if (record.status === 'IN') {
+        dayStats.checkIns.push(record.scan_time || record.created_at);
+      } else if (record.status === 'OUT') {
+        dayStats.checkOuts.push(record.scan_time || record.created_at);
+      }
+    });
+    
+    return dailyStats;
+  };
 
-        // Grade filter
-        const gradeMatch = !gradeFilter || record.grade === gradeFilter
+  // Process all attendance data
+  const dailyAttendanceMap = processDailyAttendance(attendanceData);
 
-        return statusMatch && gradeMatch
-      })
-    : absentStudents.filter(student => {
-        // Grade filter for absent students
-        const gradeMatch = !gradeFilter || student.grade === gradeFilter
-        return gradeMatch
-      })
+    // First, filter the data
+    const allFilteredData = attendanceFilter === 'present' 
+      ? attendanceData.filter(record => {
+          // Status filter
+          let statusMatch = false;
+          
+          if (statusFilter === 'all') {
+            statusMatch = true;
+          } else if (timeSettings && record.statusType) {
+            // ✅ More comprehensive status matching
+            switch (statusFilter) {
+              case 'late':
+                statusMatch = record.statusType === 'late';
+                break;
+              case 'on-time':
+                statusMatch = ['on-time', 'early-arrival', 'normal-departure'].includes(record.statusType);
+                break;
+              case 'early-departure':
+                statusMatch = record.statusType === 'early-departure';
+                break;
+              default:
+                statusMatch = false;
+            }
+          } else if (!timeSettings) {
+            // If no time settings, only 'all' filter works
+            statusMatch = statusFilter === 'all';
+          }
 
-  // Then apply pagination
-  const totalRecordsCount = allFilteredData.length
+          // Grade filter
+          const gradeMatch = !gradeFilter || record.grade === gradeFilter
+
+          return statusMatch && gradeMatch
+        })
+      : absentStudents.filter(student => {
+          const gradeMatch = !gradeFilter || student.grade === gradeFilter
+          return gradeMatch
+        })
+        
+    // ✅ Calculate present/absent counts with detailed tracking
+    const presentCount = (() => {
+      if (attendanceFilter !== 'present') return 0;
+      
+      // Get unique students who have ANY record (check-in OR check-out) in the date range
+      const uniqueStudents = new Set(
+        attendanceData
+          .filter(record => {
+            const gradeMatch = !gradeFilter || record.grade === gradeFilter;
+            return gradeMatch;
+          })
+          .map(record => record.student_id || record.StudentID)
+          .filter(id => id) // Remove undefined
+      );
+      
+      console.log('📊 Present Count Calculation:', {
+        totalRecords: attendanceData.length,
+        uniqueStudents: uniqueStudents.size,
+        gradeFilter,
+        dateRange,
+        dailyBreakdown: Array.from(dailyAttendanceMap.values()).slice(0, 5) // Sample
+      });
+      
+      return uniqueStudents.size;
+    })();
+
+    const absentCount = (() => {
+      // Filter absent students by grade
+      const filtered = absentStudents.filter(student => {
+        const gradeMatch = !gradeFilter || student.grade === gradeFilter;
+        return gradeMatch;
+      });
+      
+      console.log('📊 Absent Count Calculation:', {
+        totalAbsent: absentStudents.length,
+        afterGradeFilter: filtered.length,
+        gradeFilter,
+        dateRange
+      });
+      
+      return filtered.length;
+    })();
+
+    // ✅ Check if viewing today or different date
+    const isViewingToday = dateRange.to === new Date().toISOString().split('T')[0];
+    const isViewingSingleDay = dateRange.from === dateRange.to;
+
+    // ✅ Dynamic labels based on date selection
+    const presentLabel = isViewingToday 
+      ? '✅ Present Today' 
+      : isViewingSingleDay 
+        ? `✅ Present (${dateRange.to})`
+        : `✅ Present (${dateRange.from} to ${dateRange.to})`;
+
+    const absentLabel = isViewingToday 
+      ? '❌ Absent Today' 
+      : isViewingSingleDay 
+        ? `❌ Absent (${dateRange.to})`
+        : `❌ Absent (${dateRange.from} to ${dateRange.to})`;
+
+    console.log('📊 Final Counts:', {
+      present: presentCount,
+      absent: absentCount,
+      totalStudents: presentCount + absentCount,
+      isViewingToday,
+      isViewingSingleDay
+    });
+
+    // Then apply pagination - BUT FIRST GROUP BY STUDENT-DAY
+  const groupedData = attendanceFilter === 'present' 
+    ? (() => {
+        const studentDayMap = new Map();
+        
+        allFilteredData.forEach(record => {
+          const studentId = record.student_id || record.StudentID;
+          const date = new Date(record.scan_time || record.created_at).toDateString();
+          const key = `${studentId}-${date}`;
+          
+          if (!studentDayMap.has(key)) {
+            studentDayMap.set(key, {
+              ...record, // Keep all record properties
+              allRecords: [], // Store all records for this student-day
+              checkIns: [],
+              checkOuts: []
+            });
+          }
+          
+          const dayData = studentDayMap.get(key);
+          dayData.allRecords.push(record);
+          
+          if (record.status === 'IN') {
+            dayData.checkIns.push(record);
+          } else if (record.status === 'OUT') {
+            dayData.checkOuts.push(record);
+          }
+        });
+        
+        return Array.from(studentDayMap.values());
+      })()
+    : allFilteredData; // For absent students, no grouping needed
+
+  const totalRecordsCount = groupedData.length
   const startIndex = pageSize === 'all' ? 0 : (currentPage - 1) * pageSize
   const endIndex = pageSize === 'all' ? totalRecordsCount : startIndex + parseInt(pageSize)
-  const filteredData = pageSize === 'all' ? allFilteredData : allFilteredData.slice(startIndex, endIndex)
+  const filteredData = pageSize === 'all' ? groupedData : groupedData.slice(startIndex, endIndex)
 
   // Calculate pagination info
   const totalPages = pageSize === 'all' ? 1 : Math.ceil(totalRecordsCount / pageSize)
@@ -409,13 +748,20 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       return { all: 0, late: 0, 'on-time': 0, 'early-departure': 0 }
     }
 
+    // ✅ Filter out records without statusType for specific counts
+    const recordsWithStatus = attendanceData.filter(r => 
+      r.statusType && 
+      timeSettings &&
+      ['late', 'on-time', 'early-arrival', 'early-departure', 'normal-departure'].includes(r.statusType)
+    );
+
     return {
-      all: filteredData.length,
-      late: filteredData.filter(r => r.statusType === 'late').length,
-      'on-time': filteredData.filter(r => 
-        r.statusType === 'on-time' || r.statusType === 'early-arrival'
+      all: attendanceData.length, // All records (including after-hours)
+      late: recordsWithStatus.filter(r => r.statusType === 'late').length,
+      'on-time': recordsWithStatus.filter(r => 
+        ['on-time', 'early-arrival', 'normal-departure'].includes(r.statusType)
       ).length,
-      'early-departure': filteredData.filter(r => r.statusType === 'early-departure').length
+      'early-departure': recordsWithStatus.filter(r => r.statusType === 'early-departure').length
     }
   }
 
@@ -520,7 +866,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                 </Button>
                 <Button 
                   onClick={exportToExcel}
-                  disabled={exporting || filteredData.length === 0}
+                  disabled={exporting || allFilteredData.length === 0}
                   className="bg-green-600 hover:bg-green-700 text-white shadow-md"
                 >
                   {exporting ? '📤 Exporting...' : '📊 Export Excel'}
@@ -750,6 +1096,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                       onClick={() => {
                         setAttendanceFilter('present')
                         setStatusFilter('all')
+                        resetPagination()
                       }}
                       className={`px-4 py-2 text-sm rounded-lg font-medium transition-all shadow-md ${
                         attendanceFilter === 'present' 
@@ -757,19 +1104,32 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                           : 'bg-white text-gray-600 border-2 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      ✅ Present Today ({stats?.present_today || 0})
+                      {presentLabel} ({presentCount})
                     </button>
                     <button
-                      onClick={() => setAttendanceFilter('absent')}
+                      onClick={() => {
+                        setAttendanceFilter('absent')
+                        resetPagination()
+                      }}
                       className={`px-4 py-2 text-sm rounded-lg font-medium transition-all shadow-md ${
                         attendanceFilter === 'absent' 
                           ? 'bg-red-500 text-white border-2 border-red-600 scale-105' 
                           : 'bg-white text-gray-600 border-2 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      ❌ Absent Today ({absentStudents.length})
+                      {absentLabel} ({absentCount})
                     </button>
                   </div>
+                  
+                  {/* ✅ Show date range info when not viewing today */}
+                  {!isViewingToday && (
+                    <div className="mt-2 text-xs text-gray-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                      📅 Viewing data for: {isViewingSingleDay 
+                        ? formatDate(dateRange.to) 
+                        : `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+                      }
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -825,14 +1185,22 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
               )}
 
               {/* Export Summary */}
-              {filteredData.length > 0 && (
+              {allFilteredData.length > 0 && (
                 <div className="text-sm text-gray-600 border-t-2 border-blue-200 pt-3">
-                  📤 Ready to export: <span className="font-bold">{filteredData.length} records</span>
-                  {statusFilter !== 'all' && ` (filtered by ${statusFilter.replace('-', ' ')})`}
-                  {gradeFilter && ` (Grade ${gradeFilter})`}
+                  📤 Ready to export: 
+                  {attendanceFilter === 'present' ? (
+                    <>
+                      <span className="font-bold"> {presentCount} unique students</span> 
+                      <span className="text-xs"> ({allFilteredData.length} {statusFilter === 'all' ? 'attendance records' : `${statusFilter} records`})</span>
+                    </>
+                  ) : (
+                    <span className="font-bold"> {absentCount} absent students</span>
+                  )}
+                  {statusFilter !== 'all' && ` • ${statusFilter.replace('-', ' ')} only`}
+                  {gradeFilter && ` • Grade ${gradeFilter}`}
                   {dateRange.from === dateRange.to 
-                    ? ` for ${formatDate(dateRange.from)}`
-                    : ` from ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+                    ? ` • ${formatDate(dateRange.from)}`
+                    : ` • ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
                   }
                 </div>
               )}
@@ -913,10 +1281,10 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                       📊 Status
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider hidden sm:table-cell">
-                      ⏰ Time
+                      {attendanceFilter === 'present' ? '⏰ Check In/Out Times' : '📅 Date Range'}
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider hidden sm:table-cell">
-                      📅 Date
+                      {attendanceFilter === 'present' ? '📅 Date' : '📊 Days Absent'}
                     </th>
                     {isCompanyAdmin && (
                       <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider hidden md:table-cell">
@@ -927,83 +1295,138 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredData && filteredData.length > 0 ? (
-                    filteredData.map((record, index) => (
-                      <tr key={record.id || record.student_id || record.attendance_id || index} className="hover:bg-blue-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {attendanceFilter === 'present' 
-                              ? (record.studentName || record.student_name || 'Unknown Student')
-                              : (record.name || 'Unknown Student')
-                            }
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {attendanceFilter === 'present' ? (
-                              <div className="sm:hidden">
-                                ⏰ {formatTime(record.scan_time || record.time || record.created_at)}
-                              </div>
-                            ) : (
-                              <span className="text-red-600">❌ No attendance today</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex px-3 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-2 border-blue-300">
-                            {(attendanceFilter === 'present' ? record.grade : record.grade) 
-                              ? `${attendanceFilter === 'present' ? record.grade : record.grade}` 
-                              : 'N/A'
-                            }
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {attendanceFilter === 'present' ? (
-                            <div className="space-y-1">
-                              {record.statusType && timeSettings ? (
-                                <span className={getStatusBadgeClasses(record.statusType)}>
-                                  {getStatusIcon(record.statusType)} {record.statusLabel}
-                                </span>
+                    filteredData.map((record, index) => {
+                      // ✅ Calculate daily stats for this record
+                      const recordDate = new Date(record.scan_time || record.created_at).toDateString();
+                      const dayKey = `${record.student_id || record.StudentID}-${recordDate}`;
+                      const dayStats = dailyAttendanceMap.get(dayKey) || {
+                        checkIns: [],
+                        checkOuts: []
+                      };
+                      
+                      const hasCheckIn = dayStats.checkIns.length > 0;
+                      const hasCheckOut = dayStats.checkOuts.length > 0;
+                      const isIncomplete = hasCheckIn && !hasCheckOut;
+                      
+                      return (
+                        <tr key={record.id || record.student_id || record.attendance_id || index} className="hover:bg-blue-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {attendanceFilter === 'present' 
+                                ? (record.studentName || record.student_name || 'Unknown Student')
+                                : (record.name || 'Unknown Student')
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {attendanceFilter === 'present' ? (
+                                <>
+                                  <div className="sm:hidden">
+                                    ⏰ {formatTime(record.scan_time || record.time || record.created_at)}
+                                  </div>
+                                  <div className="mt-1">
+                                    <span className="text-blue-600">✓ {dayStats.checkIns.length} IN</span>
+                                    {' • '}
+                                    <span className="text-purple-600">✓ {dayStats.checkOuts.length} OUT</span>
+                                    {isIncomplete && (
+                                      <span className="ml-2 text-orange-600 font-medium">⚠️ No checkout</span>
+                                    )}
+                                  </div>
+                                </>
                               ) : (
-                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                  record.status === 'IN' ? 'bg-green-100 text-green-800' : 
-                                  record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {record.status === 'IN' ? 'Check In' : 
-                                   record.status === 'OUT' ? 'Check Out' : 
-                                   record.status || 'Unknown'}
-                                </span>
-                              )}
-                              {record.message && (
-                                <div className="text-xs text-gray-500 lg:hidden">
-                                  {record.message}
-                                </div>
+                                <span className="text-red-600">❌ No attendance in range</span>
                               )}
                             </div>
-                          ) : (
-                            <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              ❌ Absent
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex px-3 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-2 border-blue-300">
+                              {record.grade || 'N/A'}
                             </span>
-                          )}
-                        </td>
-                        {attendanceFilter === 'present' && (
-                          <>
-                            <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                              {formatTime(record.scan_time || record.time || record.created_at)}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                              {formatDate(record.scan_time || record.time || record.created_at)}
-                            </td>
-                          </>
-                        )}
-                        {isCompanyAdmin && (
-                          <td className="px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+                          </td>
+                          <td className="px-6 py-4">
+                            {attendanceFilter === 'present' ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {record.statusType && timeSettings ? (
+                                    <span className={getStatusBadgeClasses(record.statusType)}>
+                                      {getStatusIcon(record.statusType)} {record.statusLabel}
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                      record.status === 'IN' ? 'bg-green-100 text-green-800' : 
+                                      record.status === 'OUT' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {record.status === 'IN' ? 'Check In' : 
+                                      record.status === 'OUT' ? 'Check Out' : 
+                                      record.status || 'Unknown'}
+                                    </span>
+                                  )}
+                                  {isIncomplete && (
+                                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-300">
+                                      ⚠️ Incomplete
+                                    </span>
+                                  )}
+                                </div>
+                                {record.message && (
+                                  <div className="text-xs text-gray-500 lg:hidden">
+                                    {record.message}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                ❌ Absent
+                              </span>
+                            )}
+                          </td>
+                          {/* ✅ Show check-in/check-out details */}
+                          <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                            {attendanceFilter === 'present' ? (
+                              <div className="space-y-1">
+                                {dayStats.checkIns.length > 0 && (
+                                  <div className="text-blue-600">
+                                    <span className="font-medium">IN:</span> {dayStats.checkIns.map(time => formatTime(time)).join(', ')}
+                                  </div>
+                                )}
+                                {dayStats.checkOuts.length > 0 && (
+                                  <div className="text-purple-600">
+                                    <span className="font-medium">OUT:</span> {dayStats.checkOuts.map(time => formatTime(time)).join(', ')}
+                                  </div>
+                                )}
+                                {isIncomplete && (
+                                  <div className="text-orange-600 text-xs font-medium">⚠️ No checkout recorded</div>
+                                )}
+                              </div>
+                            ) : (
+                              `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
                             {attendanceFilter === 'present' 
-                              ? (record.school_name || 'Unknown School')
-                              : (record.school_name || 'Unknown School')
+                              ? formatDate(record.scan_time || record.time || record.created_at)
+                              : (() => {
+                                  // Calculate weekdays in range
+                                  const start = new Date(dateRange.from);
+                                  const end = new Date(dateRange.to);
+                                  let days = 0;
+                                  const current = new Date(start);
+                                  while (current <= end) {
+                                    const dayOfWeek = current.getDay();
+                                    if (dayOfWeek >= 1 && dayOfWeek <= 5) days++;
+                                    current.setDate(current.getDate() + 1);
+                                  }
+                                  return `${days} days`;
+                                })()
                             }
                           </td>
-                        )}
-                      </tr>
-                    ))
+                          {isCompanyAdmin && (
+                            <td className="px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+                              {record.school_name || 'Unknown School'}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan={
@@ -1027,7 +1450,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                                 {attendanceFilter === 'absent' 
                                   ? `No absent students found${gradeFilter ? ` in Grade ${gradeFilter}` : ''}`
                                   : (statusFilter === 'all' && !gradeFilter ? 'No attendance records found' : 
-                                     `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`
+                                    `No records found for ${statusFilter !== 'all' ? statusFilter.replace('-', ' ') : ''}${statusFilter !== 'all' && gradeFilter ? ' and ' : ''}${gradeFilter ? `Grade ${gradeFilter}` : ''}`
                                     )
                                 }
                               </p>
@@ -1049,7 +1472,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
           </Card>
 
           {/* Footer Summary */}
-          {filteredData && filteredData.length > 0 && (
+          {allFilteredData && allFilteredData.length > 0 && (
             <Card className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
               <div className="text-center">
                 <div className="text-sm text-gray-700">

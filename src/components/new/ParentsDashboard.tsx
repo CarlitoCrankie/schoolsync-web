@@ -94,35 +94,123 @@ export default function ParentDashboard({ user, onLogout }: ParentDashboardProps
     loadParentData();
   }, [user]);
 
-  const loadParentData = async () => {
-    setLoading(true);
-    setError('');
+  // const loadParentData = async () => {
+  //   setLoading(true);
+  //   setError('');
 
-    try {
-      const result = await apiPost('/api/attendance', {
-        action: 'get_student_attendance',
-        student_id: user.student_id,
-        school_id: user.school.id
+  //   try {
+  //     const result = await apiPost('/api/attendance', {
+  //       action: 'get_student_attendance',
+  //       student_id: user.student_id,
+  //       school_id: user.school.id
+  //     });
+
+  //     if (result.success) {
+  //       setAttendanceData(result.attendance || []);
+  //       setStats(result.stats || []);
+  //     } else {
+  //       loadMockData();
+  //     }
+  //   } catch (error) {
+  //     console.error('Failed to load parent data:', error);
+  //     loadMockData();
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // const loadMockData = () => {
+  //   const mockAttendance: AttendanceRecord[] = [
+  //     { id: 1, scanTime: '2025-08-26T08:15:00', status: 'IN', date: '2025-08-26' },
+  //     { id: 2, scanTime: '2025-08-25T08:10:00', status: 'IN', date: '2025-08-25' }
+  //   ];
+
+  //   setAttendanceData(mockAttendance);
+  //   setStats({
+  //     totalDays: 2,
+  //     presentDays: 2,
+  //     lateDays: 0,
+  //     absentDays: 0,
+  //     attendanceRate: 100
+  //   });
+  // };
+
+  const loadParentData = async () => {
+  setLoading(true);
+  setError('');
+
+  try {
+    const studentId = user.student_id;
+    const schoolId = user.school.id;
+
+    console.log('📊 Loading parent dashboard for:', { studentId, schoolId });
+
+    // Fetch attendance data for last 365 days (full year)
+    const result = await apiPost('/api/attendance', {
+      action: 'get_student_attendance',
+      student_id: studentId,
+      school_id: schoolId,
+      limit: 999999,
+      days: 365
+    });
+
+    console.log('📥 API Response:', result);
+
+    if (result.success) {
+      const backendStats = result.stats || {};
+      
+      setAttendanceData(result.attendance || []);
+      setStats({
+        attendanceRate: backendStats.attendanceRate || 0,
+        presentDays: backendStats.presentDays || 0,
+        lateDays: backendStats.lateDays || 0,
+        absentDays: backendStats.absentDays || 0,
+        totalDays: backendStats.expectedSchoolDays || 0
       });
 
-      if (result.success) {
-        setAttendanceData(result.attendance || []);
-        setStats(result.stats || []);
-      } else {
-        loadMockData();
-      }
-    } catch (error) {
-      console.error('Failed to load parent data:', error);
+      console.log('✅ Dashboard data loaded:', {
+        stats: backendStats,
+        recordsCount: result.attendance?.length || 0
+      });
+    } else {
+      console.warn('⚠️ API returned success=false, loading mock data');
       loadMockData();
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error: any) {
+    console.error('❌ Failed to load parent data:', error);
+    setError(error.message || 'Failed to load attendance data. Please try again.');
+    loadMockData();
+  } finally {
+    setLoading(false);
+  }
+};
 
   const loadMockData = () => {
+    console.log('📝 Loading mock data');
+    
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
     const mockAttendance: AttendanceRecord[] = [
-      { id: 1, scanTime: '2025-08-26T08:15:00', status: 'IN', date: '2025-08-26' },
-      { id: 2, scanTime: '2025-08-25T08:10:00', status: 'IN', date: '2025-08-25' }
+      { 
+        id: 1, 
+        scanTime: today.toISOString(), 
+        status: 'IN', 
+        date: today.toISOString().split('T')[0],
+        statusType: 'on-time',
+        statusLabel: 'On Time',
+        message: 'Arrived on time'
+      },
+      { 
+        id: 2, 
+        scanTime: yesterday.toISOString(), 
+        status: 'IN', 
+        date: yesterday.toISOString().split('T')[0],
+        statusType: 'on-time',
+        statusLabel: 'On Time',
+        message: 'Arrived on time'
+      }
     ];
 
     setAttendanceData(mockAttendance);
@@ -133,7 +221,7 @@ export default function ParentDashboard({ user, onLogout }: ParentDashboardProps
       absentDays: 0,
       attendanceRate: 100
     });
-  };
+};
 
   if (loading) {
     return (
@@ -142,6 +230,24 @@ export default function ParentDashboard({ user, onLogout }: ParentDashboardProps
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading attendance data...</p>
         </div>
+      </div>
+    );
+  }
+
+    // ✅ Add error display
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="p-8 max-w-md">
+          <div className="text-center">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Unable to Load Data</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button onClick={loadParentData}>
+              Try Again
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -304,6 +410,7 @@ export default function ParentDashboard({ user, onLogout }: ParentDashboardProps
               <ParentAttendanceTab 
                 attendanceData={attendanceData}
                 studentId={user.student_id}
+                initialStats={stats}
               />
             )}
 
