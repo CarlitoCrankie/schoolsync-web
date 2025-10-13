@@ -307,11 +307,17 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
       // ✅ Get unique student IDs who have ANY attendance (IN or OUT) in the date range
       const presentStudentIds = new Set();
       
+      // ✅ FIX: Use UTC dates consistently
+      const rangeStart = new Date(dateRange.from + 'T00:00:00.000Z');
+      const rangeEnd = new Date(dateRange.to + 'T23:59:59.999Z');
+      
+      console.log('📅 Date range (UTC):', {
+        from: rangeStart.toISOString(),
+        to: rangeEnd.toISOString()
+      });
+      
       attendanceDataToUse.forEach(record => {
         const recordDate = new Date(record.scan_time || record.time || record.created_at);
-        const rangeStart = new Date(dateRange.from);
-        const rangeEnd = new Date(dateRange.to);
-        rangeEnd.setHours(23, 59, 59, 999);
         
         // ✅ Count ANY status (IN or OUT) as present
         const hasAttendance = recordDate >= rangeStart && recordDate <= rangeEnd;
@@ -329,6 +335,7 @@ function AttendanceTab({ attendance, isCompanyAdmin, user, stats }: AttendanceTa
                 studentName,
                 status: record.status,
                 scanTime: record.scan_time,
+                recordDate: recordDate.toISOString(),
                 inDateRange: hasAttendance
               });
             }
