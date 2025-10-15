@@ -88,12 +88,12 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200">
+      <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 shadow-lg">
         <div className="flex items-start">
           <span className="text-4xl mr-4">📤</span>
           <div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">Upload Students with Parent Information</h3>
-            <p className="text-sm text-gray-600">
+            <h3 className="text-2xl font-extrabold text-gray-900 mb-2">Upload Students with Parent Information</h3>
+            <p className="text-sm text-gray-800 font-semibold">
               Bulk upload students and automatically create parent accounts with contact information
             </p>
           </div>
@@ -101,12 +101,12 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
       </Card>
       
       {/* Enhanced Template Info */}
-      <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200">
+      <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 shadow-lg">
         <div className="flex items-start mb-4">
           <span className="text-3xl mr-3">📋</span>
-          <h4 className="text-xl font-bold text-blue-900">Enhanced CSV Template</h4>
+          <h4 className="text-xl font-extrabold text-blue-900">Enhanced CSV Template</h4>
         </div>
-        <p className="text-sm text-blue-800 mb-4">
+        <p className="text-sm text-blue-900 mb-4 font-semibold">
           New template includes parent contact information and default passwords. 
           Download the template to ensure your CSV file has the correct format.
         </p>
@@ -142,10 +142,10 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
       </Card>
 
       {/* Important Notes */}
-      <Card className="p-6 bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300">
+      <Card className="p-6 bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-400 shadow-lg">
         <div className="flex items-start mb-4">
           <span className="text-3xl mr-3">⚠️</span>
-          <h4 className="text-xl font-bold text-yellow-900">Important Notes</h4>
+          <h4 className="text-xl font-extrabold text-yellow-900">Important Notes</h4>
         </div>
         <div className="space-y-3">
           <div className="bg-white rounded-lg p-3 border-2 border-yellow-200">
@@ -172,7 +172,7 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
       </Card>
 
       {/* Upload Form */}
-      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200">
+      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-300 shadow-lg">
         <form onSubmit={handleFileUpload} className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-3">
@@ -237,18 +237,18 @@ function UploadStudentsTab({ user, onUploadComplete }: UploadStudentsTabProps) {
 
       {/* Results Section */}
       {results && (
-        <Card className={`p-6 border-2 ${
+        <Card className={`p-6 border-2 shadow-lg ${
           results.success 
-            ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300' 
-            : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-300'
+            ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-400' 
+            : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-400'
         }`}>
           <div className="flex items-start mb-4">
             <span className="text-3xl mr-3">{results.success ? '✅' : '❌'}</span>
-            <h4 className={`text-xl font-bold ${results.success ? 'text-green-900' : 'text-red-900'}`}>
+            <h4 className={`text-xl font-extrabold ${results.success ? 'text-green-900' : 'text-red-900'}`}>
               Upload Results
             </h4>
           </div>
-          
+                    
           {results.success ? (
             <div className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

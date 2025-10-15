@@ -19,6 +19,10 @@ function StudentsTab({ onRefresh, user }: StudentsTabProps) {
   const [modalType, setModalType] = useState('')
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [grades, setGrades] = useState([])
+  const [clearFields, setClearFields] = useState({
+  email: false,
+  phone: false
+})
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -268,13 +272,16 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
   const openModal = (type, student = null) => {
     setModalType(type)
     setSelectedStudent(student)
+    setClearFields({ email: false, phone: false }) // ✅ MUST reset clearFields
     
     if (type === 'edit' && student) {
       setStudentForm({
         name: student.name || '',
         grade: student.grade || '',
         student_code: student.student_code || student.studentCode || '',
-        parent_password: '',
+        parent_password: '', // Always blank (security)
+        parent_email: student.parent_email || '', // ✅ Pre-fill
+        parent_phone: student.parent_phone || '', // ✅ Pre-fill
         is_active: student.is_active !== false
       })
     } else if (type === 'add') {
@@ -292,6 +299,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
     setModalType('')
     setSelectedStudent(null)
     resetForm()
+    setClearFields({ email: false, phone: false }) // ✅ Reset clearFields
     setShowPasswords({
       addPassword: false,
       editPassword: false
@@ -313,25 +321,72 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
       let result
       
       if (modalType === 'add') {
-        result = await apiPost('/api/students', {  // ✅ Use apiPost
-          ...studentForm,
+        result = await apiPost('/api/students', {
+          name: studentForm.name.trim(),
+          grade: studentForm.grade,
+          student_code: studentForm.student_code,
           school_id: user.school_id || user.SchoolID,
-          name: studentForm.name.trim()
+          is_active: studentForm.is_active
         })
+        
+        if (result.success && studentForm.parent_password && studentForm.parent_password.trim()) {
+          await apiPost('/api/auth', {
+            action: 'set_password',
+            student_id: result.data.student_id,
+            school_id: user.school_id || user.SchoolID,
+            new_password: studentForm.parent_password
+          })
+        }
+        
+        if (result.success && (studentForm.parent_email?.trim() || studentForm.parent_phone?.trim())) {
+          await apiPost('/api/auth', {
+            action: 'update_parent_contact',
+            student_id: result.data.student_id,
+            parent_email: studentForm.parent_email?.trim() || null,
+            parent_phone: studentForm.parent_phone?.trim() || null
+          })
+        }
+        
       } else if (modalType === 'edit') {
-        result = await apiPut(`/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, studentForm)  // ✅ Use apiPut
+        const updateData = {
+          name: studentForm.name.trim(),
+          grade: studentForm.grade,
+          student_code: studentForm.student_code,
+          is_active: studentForm.is_active
+        }
+
+        // ✅ ALWAYS include email/phone to allow clearing
+        updateData.parent_email = clearFields.email 
+          ? null 
+          : (studentForm.parent_email?.trim() || null)
+        
+        updateData.parent_phone = clearFields.phone 
+          ? null 
+          : (studentForm.parent_phone?.trim() || null)
+
+        result = await apiPut(
+          `/api/students?student_id=${selectedStudent.id || selectedStudent.student_id}`, 
+          updateData
+        )
+        
+        if (result.success && studentForm.parent_password && studentForm.parent_password.trim()) {
+          await apiPost('/api/auth', {
+            action: 'set_password',
+            student_id: selectedStudent.id || selectedStudent.student_id,
+            school_id: user.school_id || user.SchoolID,
+            new_password: studentForm.parent_password
+          })
+        }
       }
       
       if (result.success) {
         closeModal()
         handleRefresh()
-        alert(modalType === 'add' ? 'Student added successfully!' : 'Student updated successfully!')
-      } else {
-        alert(`Failed to ${modalType} student: ` + (result.error || 'Unknown error'))
+        alert(modalType === 'add' ? '✅ Student added successfully!' : '✅ Student updated successfully!')
       }
     } catch (error) {
       console.error(`${modalType} student error:`, error)
-      alert(`Failed to ${modalType} student: Network error`)
+      alert(`❌ Failed to ${modalType} student`)
     } finally {
       setLoading(false)
     }
@@ -361,14 +416,14 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200">
+      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-300 shadow-lg">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <div className="flex items-center mb-2">
               <span className="text-3xl mr-3">👥</span>
-              <h3 className="text-2xl font-bold text-gray-900">Student Management</h3>
+              <h3 className="text-2xl font-extrabold text-gray-900">Student Management</h3>
             </div>
-            <p className="text-gray-600 text-sm ml-11">
+            <p className="text-gray-700 text-sm ml-11 font-semibold">
               {filteredTotal !== totalStudents ? (
                 <>
                   📊 Showing <span className="font-bold">{pagination.showing_range?.from || 1}-{pagination.showing_range?.to || students.length}</span> 
@@ -402,12 +457,12 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
       </Card>
 
       {/* Filters and Pagination Controls */}
-      <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200">
+      <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 shadow-lg">
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="flex-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+              <label className="block text-sm font-extrabold text-gray-900 mb-2">
                 🔍 Search Students
               </label>
               <input
@@ -415,19 +470,19 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                 placeholder="Search by name or student code..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                className="w-full px-4 py-2 border-2 border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm font-medium text-gray-900"
               />
             </div>
             
             {/* Grade Filter */}
             <div className="w-full lg:w-48">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+              <label className="block text-sm font-extrabold text-gray-900 mb-2">
                 📚 Grade
               </label>
               <select
                 value={selectedGrade}
                 onChange={(e) => handleGradeChange(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                className="w-full px-4 py-2 border-2 border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm font-bold text-gray-900"
               >
                 <option value="">All Grades</option>
                 {grades.map((grade) => (
@@ -440,13 +495,13 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
             
             {/* Status Filter */}
             <div className="w-full lg:w-64">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+              <label className="block text-sm font-extrabold text-gray-900 mb-2">
                 📊 Status
               </label>
               <select
                 value={filterStatus}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                className="w-full px-4 py-2 border-2 border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm font-bold text-gray-900"
               >
                 <option value="all">All Students</option>
                 <option value="active">Active Students</option>
@@ -464,7 +519,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
               <select 
                 value={pageSize} 
                 onChange={(e) => handlePageSizeChange(e.target.value)}
-                className="px-3 py-1 border-2 border-blue-300 rounded-lg text-sm bg-white"
+                className="px-3 py-1 border-2 border-blue-300 rounded-lg text-gray-700 bg-white"
               >
                 {pageSizeOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -506,7 +561,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
       </Card>
 
       {/* Students Table */}
-      <Card className="overflow-hidden border-2 border-indigo-200">
+      <Card className="overflow-hidden border-2 border-indigo-300 shadow-lg bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gradient-to-r from-indigo-500 to-purple-600">
@@ -693,7 +748,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                       type="text"
                       value={studentForm.name}
                       onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
+                      className="w-full px-4 py-3 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
                       placeholder="Enter full name"
                       required
                     />
@@ -707,7 +762,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                       type="text"
                       value={studentForm.grade}
                       onChange={(e) => setStudentForm({...studentForm, grade: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
+                      className="w-full px-4 py-3 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
                       placeholder="e.g., 10th, Grade 5"
                     />
                   </div>
@@ -720,11 +775,12 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                       type="text"
                       value={studentForm.student_code}
                       onChange={(e) => setStudentForm({...studentForm, student_code: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm font-mono"
+                      className="w-full px-4 py-3 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm font-mono"
                       placeholder="Optional unique code"
                     />
                   </div>
 
+                  {/* Password field */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
                       🔐 Parent Password
@@ -734,7 +790,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                         type={showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? "text" : "password"}
                         value={studentForm.parent_password}
                         onChange={(e) => setStudentForm({...studentForm, parent_password: e.target.value})}
-                        className="w-full px-4 py-3 pr-12 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
+                        className="w-full px-4 py-3 pr-12 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
                         placeholder={modalType === 'edit' ? 'Leave blank to keep current' : 'Optional'}
                       />
                       <button
@@ -745,40 +801,106 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                         {showPasswords[modalType === 'add' ? 'addPassword' : 'editPassword'] ? '👁️' : '🔒'}
                       </button>
                     </div>
-
-                    <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                        📧 Parent Email
-                    </label>
-                    <input
-                        type="email"
-                        value={studentForm.parent_email}
-                        onChange={(e) => setStudentForm({...studentForm, parent_email: e.target.value})}
-                        className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                        placeholder="parent@example.com"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Email for attendance notifications
-                    </p>
-                    </div>
-
-                    <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                        📱 Parent Phone
-                    </label>
-                    <input
-                        type="tel"
-                        value={studentForm.parent_phone}
-                        onChange={(e) => setStudentForm({...studentForm, parent_phone: e.target.value})}
-                        className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                        placeholder="+233123456789"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Phone for SMS notifications
-                    </p>
-                    </div>
+                    {modalType === 'edit' && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Leave blank to keep current password
+                      </p>
+                    )}
                   </div>
 
+                  {/* Email field with Remove checkbox */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      📧 Parent Email
+                    </label>
+                    <input
+                      type="email"
+                      value={studentForm.parent_email}
+                      onChange={(e) => {
+                        setStudentForm({...studentForm, parent_email: e.target.value})
+                        if (e.target.value.trim()) {
+                          setClearFields(prev => ({...prev, email: false}))
+                        }
+                      }}
+                      disabled={modalType === 'edit' && clearFields.email}
+                      className="w-full px-4 py-3 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+                      placeholder="parent@example.com"
+                    />
+                    
+                    {modalType === 'edit' && studentForm.parent_email && (
+                      <div className="flex items-center mt-2 p-2 bg-red-50 rounded-lg border border-red-200">
+                        <input
+                          type="checkbox"
+                          id="clearEmail"
+                          checked={clearFields.email}
+                          onChange={(e) => {
+                            setClearFields(prev => ({...prev, email: e.target.checked}))
+                            if (e.target.checked) {
+                              setStudentForm({...studentForm, parent_email: ''})
+                            }
+                          }}
+                          className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="clearEmail" className="ml-2 block text-sm text-red-700 font-medium">
+                          🗑️ Remove email (parent won't receive email notifications)
+                        </label>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      {modalType === 'edit' 
+                        ? 'Update to change email or check "Remove" to stop email notifications'
+                        : 'Email for attendance notifications'}
+                    </p>
+                  </div>
+
+                  {/* Phone field with Remove checkbox */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      📱 Parent Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={studentForm.parent_phone}
+                      onChange={(e) => {
+                        setStudentForm({...studentForm, parent_phone: e.target.value})
+                        if (e.target.value.trim()) {
+                          setClearFields(prev => ({...prev, phone: false}))
+                        }
+                      }}
+                      disabled={modalType === 'edit' && clearFields.phone}
+                      className="w-full px-4 py-3 text-sm text-gray-900 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm disabled:bg-gray-100 disabled:text-gray-500"
+                      placeholder="+233123456789"
+                    />
+                    
+                    {modalType === 'edit' && studentForm.parent_phone && (
+                      <div className="flex items-center mt-2 p-2 bg-red-50 rounded-lg border border-red-200">
+                        <input
+                          type="checkbox"
+                          id="clearPhone"
+                          checked={clearFields.phone}
+                          onChange={(e) => {
+                            setClearFields(prev => ({...prev, phone: e.target.checked}))
+                            if (e.target.checked) {
+                              setStudentForm({...studentForm, parent_phone: ''})
+                            }
+                          }}
+                          className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="clearPhone" className="ml-2 block text-sm text-red-700 font-medium">
+                          🗑️ Remove phone (parent won't receive SMS notifications)
+                        </label>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      {modalType === 'edit'
+                        ? 'Update to change phone or check "Remove" to stop SMS notifications'
+                        : 'Phone for SMS notifications'}
+                    </p>
+                  </div>
+
+                  {/* Active checkbox */}
                   <div className="flex items-center p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
                     <input
                       type="checkbox"

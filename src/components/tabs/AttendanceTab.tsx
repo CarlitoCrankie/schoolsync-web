@@ -883,7 +883,7 @@ if (!gradeFilter) {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+      <Card className="p-6 bg-white border-2 border-blue-300 shadow-lg">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
           <div>
             <h3 className="text-xl font-bold text-gray-900">
@@ -903,14 +903,14 @@ if (!gradeFilter) {
                   type="date"
                   value={dateRange.from}
                   onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-                  className="border-2 border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="border-2 border-blue-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   max={dateRange.to}
                 />
                 <input
                   type="date"
                   value={dateRange.to}
                   onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-                  className="border-2 border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="border-2 border-blue-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   min={dateRange.from}
                   max={new Date().toISOString().split('T')[0]}
                 />
@@ -942,7 +942,7 @@ if (!gradeFilter) {
 
       {/* Search Section */}
       {showSearch && (
-        <Card className="p-6 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
+        <Card className="p-6 border-2 border-indigo-300 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-lg">
           <h4 className="text-lg font-bold text-gray-900 mb-4">🔍 Search Student Attendance</h4>
           
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
@@ -1130,7 +1130,7 @@ if (!gradeFilter) {
                   <select
                     value={gradeFilter}
                     onChange={(e) => setGradeFilter(e.target.value)}
-                    className="block w-full sm:w-48 px-3 py-2 border-2 border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    className="block w-full sm:w-48 px-3 py-2 text-gray-700 border-2 border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
                     <option value="">All Grades</option>
                     {availableGrades.map((grade) => (
@@ -1274,14 +1274,14 @@ if (!gradeFilter) {
           )}
 
           {/* Pagination Controls */}
-          <Card className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <Card className="p-4 bg-white border-2 border-gray-300 shadow-md">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm font-bold text-gray-700">📄 Items per page:</label>
                 <select 
                   value={pageSize} 
                   onChange={(e) => handlePageSizeChange(e.target.value)}
-                  className="px-3 py-1 border-2 border-gray-300 rounded-lg text-sm bg-white"
+                  className="px-3 py-1 border-2 text-gray-700 border-gray-300 rounded-lg text-sm bg-white"
                 >
                   {pageSizeOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -1323,7 +1323,7 @@ if (!gradeFilter) {
           </Card>
 
           {/* Attendance Table */}
-          <Card className="overflow-hidden border-blue-200">
+          <Card className="overflow-hidden border-2 border-blue-300 shadow-lg bg-white">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gradient-to-r from-blue-500 to-indigo-600">

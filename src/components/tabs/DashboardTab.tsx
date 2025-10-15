@@ -66,7 +66,7 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, s
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Network-wide Activity */}
-        <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+        <Card className="p-6 bg-white border-2 border-blue-300 shadow-lg">
           <div className="flex items-center mb-4">
             <span className="text-2xl mr-2">🌐</span>
             <h3 className="text-lg font-bold text-gray-900">Network Activity Today</h3>
@@ -109,7 +109,7 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, s
         {/* System Overview */}
         <div className="space-y-6">
           {/* Quick Actions */}
-          <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200">
+          <Card className="p-6 bg-white border-2 border-purple-300 shadow-lg">
             <div className="flex items-center mb-4">
               <span className="text-2xl mr-2">⚡</span>
               <h4 className="font-bold text-purple-900">Quick Actions</h4>
@@ -137,7 +137,7 @@ function DashboardTab({ attendance, stats, isCompanyAdmin, user, setActiveTab, s
           </Card>
           
           {/* Network Status */}
-          <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+          <Card className="p-6 bg-white border-2 border-green-300 shadow-lg">
             <div className="flex items-center mb-4">
               <span className="text-2xl mr-2">📡</span>
               <h4 className="font-bold text-green-900">Network Status</h4>

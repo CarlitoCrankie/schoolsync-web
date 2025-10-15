@@ -62,58 +62,114 @@ export default function ParentAttendanceTab({
   }, [attendanceData, dateFilter, selectedMonth, selectedYear]);
 
   // Calculate absent days
-  const absentDays = useMemo(() => {
-    if (!attendanceData || attendanceData.length === 0) return [];
+  // const absentDays = useMemo(() => {
+  //   if (!attendanceData || attendanceData.length === 0) return [];
 
-    const now = new Date();
-    let startDate: Date;
-    let endDate = new Date(now);
+  //   const now = new Date();
+  //   let startDate: Date;
+  //   let endDate = new Date(now);
 
-    switch (dateFilter) {
-      case 'week':
-        startDate = new Date(now);
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate = new Date(selectedYear, selectedMonth, 1);
-        endDate = new Date(selectedYear, selectedMonth + 1, 0);
-        break;
-      case 'year':
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear, 11, 31);
-        break;
-      default:
-        startDate = new Date(now);
-        startDate.setDate(startDate.getDate() - 90);
-    }
+  //   switch (dateFilter) {
+  //     case 'week':
+  //       startDate = new Date(now);
+  //       startDate.setDate(startDate.getDate() - 7);
+  //       break;
+  //     case 'month':
+  //       startDate = new Date(selectedYear, selectedMonth, 1);
+  //       endDate = new Date(selectedYear, selectedMonth + 1, 0);
+  //       break;
+  //     case 'year':
+  //       startDate = new Date(selectedYear, 0, 1);
+  //       endDate = new Date(selectedYear, 11, 31);
+  //       break;
+  //     default:
+  //       startDate = new Date(now);
+  //       startDate.setDate(startDate.getDate() - 90);
+  //   }
 
-    if (endDate > now) {
-      endDate = now;
-    }
+  //   if (endDate > now) {
+  //     endDate = now;
+  //   }
 
-    const presentDates = new Set(
-      attendanceData.map(record => {
-        const date = new Date(record.scanTime || record.date);
-        return date.toDateString();
-      })
-    );
+  //   const presentDates = new Set(
+  //     attendanceData.map(record => {
+  //       const date = new Date(record.scanTime || record.date);
+  //       return date.toDateString();
+  //     })
+  //   );
 
-    const absent = [];
-    const current = new Date(startDate);
+  //   const absent = [];
+  //   const current = new Date(startDate);
 
-    while (current <= endDate) {
-      const dayOfWeek = current.getDay();
-      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const dateString = current.toDateString();
-        if (!presentDates.has(dateString)) {
-          absent.push(new Date(current));
-        }
+  //   while (current <= endDate) {
+  //     const dayOfWeek = current.getDay();
+  //     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+  //       const dateString = current.toDateString();
+  //       if (!presentDates.has(dateString)) {
+  //         absent.push(new Date(current));
+  //       }
+  //     }
+  //     current.setDate(current.getDate() + 1);
+  //   }
+
+  //   return absent.sort((a, b) => b.getTime() - a.getTime());
+  // }, [attendanceData, dateFilter, selectedMonth, selectedYear]);
+// Calculate absent days
+const absentDays = useMemo(() => {
+  if (!attendanceData || attendanceData.length === 0) return [];
+
+  const now = new Date();
+  let startDate: Date;
+  let endDate = new Date(now);
+
+  switch (dateFilter) {
+    case 'week':
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 7);
+      break;
+    case 'month':
+      startDate = new Date(selectedYear, selectedMonth, 1);
+      endDate = new Date(selectedYear, selectedMonth + 1, 0);
+      break;
+    case 'year':
+      startDate = new Date(selectedYear, 0, 1);
+      endDate = new Date(selectedYear, 11, 31);
+      break;
+    default: // 'all'
+      // ✅ FIX: Use 365 days to match backend, not 90 days
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 365);
+      break;
+  }
+
+  if (endDate > now) {
+    endDate = now;
+  }
+
+  const presentDates = new Set(
+    attendanceData.map(record => {
+      const date = new Date(record.scanTime || record.date);
+      return date.toDateString();
+    })
+  );
+
+  const absent = [];
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      const dateString = current.toDateString();
+      if (!presentDates.has(dateString)) {
+        absent.push(new Date(current));
       }
-      current.setDate(current.getDate() + 1);
     }
+    current.setDate(current.getDate() + 1);
+  }
 
-    return absent.sort((a, b) => b.getTime() - a.getTime());
-  }, [attendanceData, dateFilter, selectedMonth, selectedYear]);
+  return absent.sort((a, b) => b.getTime() - a.getTime());
+}, [attendanceData, dateFilter, selectedMonth, selectedYear]);
+
 
   const filteredAttendance = useMemo(() => {
     if (statusFilter === 'all') return filteredByDate;
@@ -224,103 +280,106 @@ const stats = useMemo(() => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Attendance History</h2>
-          <p className="text-gray-600 mt-1">Track present and absent days with detailed filtering</p>
+      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-300 shadow-lg">
+        <div className="flex items-start">
+          <span className="text-4xl mr-4">📅</span>
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900">Attendance History</h2>
+            <p className="text-gray-700 mt-2 font-medium">Track present and absent days with detailed filtering</p>
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200">
-          <div className="text-3xl font-bold text-blue-900">{stats.attendanceRate}%</div>
-          <div className="text-sm text-blue-700 font-medium mt-1">Attendance Rate</div>
+        <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="text-4xl font-extrabold text-blue-900">{stats.attendanceRate}%</div>
+          <div className="text-sm text-blue-800 font-bold mt-2">Attendance Rate</div>
         </Card>
-        <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200">
-          <div className="text-3xl font-bold text-green-900">{stats.presentDays}</div>
-          <div className="text-sm text-green-700 font-medium mt-1">Present Days</div>
+        <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-300 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="text-4xl font-extrabold text-green-900">{stats.presentDays}</div>
+          <div className="text-sm text-green-800 font-bold mt-2">Present Days</div>
         </Card>
-        <Card className="p-4 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200">
-          <div className="text-3xl font-bold text-red-900">{stats.absentDays}</div>
-          <div className="text-sm text-red-700 font-medium mt-1">Absent Days</div>
+        <Card className="p-4 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="text-4xl font-extrabold text-red-900">{stats.absentDays}</div>
+          <div className="text-sm text-red-800 font-bold mt-2">Absent Days</div>
         </Card>
-        <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200">
-          <div className="text-3xl font-bold text-orange-900">{stats.lateCount}</div>
-          <div className="text-sm text-orange-700 font-medium mt-1">Late Arrivals</div>
+        <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-300 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="text-4xl font-extrabold text-orange-900">{stats.lateCount}</div>
+          <div className="text-sm text-orange-800 font-bold mt-2">Late Arrivals</div>
         </Card>
       </div>
 
       {/* Filters Section */}
-      <Card className="p-6">
+      <Card className="p-6 bg-white border-2 border-indigo-300 shadow-lg">
         <div className="space-y-4">
           {/* View Mode Toggle */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">View Mode</label>
+            <label className="block text-sm font-extrabold text-gray-900 mb-3 text-base">📊 View Mode</label>
             <div className="flex gap-2">
               <button
                 onClick={() => setViewMode('present')}
-                className={`flex-1 px-4 py-3 rounded-lg font-bold transition-all ${
+                className={`flex-1 px-4 py-3 rounded-lg font-extrabold transition-all border-2 ${
                   viewMode === 'present'
-                    ? 'bg-green-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-green-600 text-white shadow-lg scale-105 border-green-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
-                Present Days ({stats.presentDays})
+                ✅ Present Days ({stats.presentDays})
               </button>
               <button
                 onClick={() => setViewMode('absent')}
-                className={`flex-1 px-4 py-3 rounded-lg font-bold transition-all ${
+                className={`flex-1 px-4 py-3 rounded-lg font-extrabold transition-all border-2 ${
                   viewMode === 'absent'
-                    ? 'bg-red-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-red-600 text-white shadow-lg scale-105 border-red-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
-                Absent Days ({stats.absentDays})
+                ❌ Absent Days ({stats.absentDays})
               </button>
             </div>
           </div>
-
+          
           {/* Date Range Filter */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Time Period</label>
+            <label className="block text-sm font-extrabold text-gray-900 mb-3 text-base">📅 Time Period</label>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setDateFilter('week')}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-extrabold transition-all border-2 ${
                   dateFilter === 'week'
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-indigo-600 text-white shadow-lg border-indigo-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
                 Last 7 Days
               </button>
               <button
                 onClick={() => setDateFilter('month')}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-extrabold transition-all border-2 ${
                   dateFilter === 'month'
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-indigo-600 text-white shadow-lg border-indigo-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
                 This Month
               </button>
               <button
                 onClick={() => setDateFilter('year')}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-extrabold transition-all border-2 ${
                   dateFilter === 'year'
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-indigo-600 text-white shadow-lg border-indigo-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
                 This Year
               </button>
               <button
                 onClick={() => setDateFilter('all')}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-extrabold transition-all border-2 ${
                   dateFilter === 'all'
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-indigo-600 text-white shadow-lg border-indigo-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-300'
                 }`}
               >
                 All Time
@@ -333,11 +392,11 @@ const stats = useMemo(() => {
             <div className="flex gap-4">
               {dateFilter === 'month' && (
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Month</label>
+                  <label className="block text-sm font-extrabold text-gray-900 mb-2">📅 Month</label>
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm font-bold text-gray-900"
                   >
                     {months.map((month, index) => (
                       <option key={index} value={index}>{month}</option>
@@ -346,11 +405,11 @@ const stats = useMemo(() => {
                 </div>
               )}
               <div className="flex-1">
-                <label className="block text-sm font-bold text-gray-700 mb-1">Year</label>
+                <label className="block text-sm font-extrabold text-gray-900 mb-2">📆 Year</label>
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm font-bold text-gray-900"
                 >
                   {years.map((year) => (
                     <option key={year} value={year}>{year}</option>
@@ -363,36 +422,36 @@ const stats = useMemo(() => {
           {/* Status Filter (only for present days) */}
           {viewMode === 'present' && (
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Filter by Status</label>
+              <label className="block text-sm font-extrabold text-gray-900 mb-3 text-base">🎯 Filter by Status</label>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setStatusFilter('all')}
-                  className={`px-4 py-2 rounded-full text-sm font-bold ${
-                    statusFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'
+                  className={`px-4 py-2 rounded-full text-sm font-extrabold border-2 ${
+                    statusFilter === 'all' ? 'bg-gray-800 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
                   }`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setStatusFilter('on-time')}
-                  className={`px-4 py-2 rounded-full text-sm font-bold ${
-                    statusFilter === 'on-time' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
+                  className={`px-4 py-2 rounded-full text-sm font-extrabold border-2 ${
+                    statusFilter === 'on-time' ? 'bg-green-600 text-white border-green-700' : 'bg-white text-gray-700 border-gray-300'
                   }`}
                 >
                   On Time
                 </button>
                 <button
                   onClick={() => setStatusFilter('late')}
-                  className={`px-4 py-2 rounded-full text-sm font-bold ${
-                    statusFilter === 'late' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
+                  className={`px-4 py-2 rounded-full text-sm font-extrabold border-2 ${
+                    statusFilter === 'late' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-700 border-gray-300'
                   }`}
                 >
                   Late
                 </button>
                 <button
                   onClick={() => setStatusFilter('early')}
-                  className={`px-4 py-2 rounded-full text-sm font-bold ${
-                    statusFilter === 'early' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
+                  className={`px-4 py-2 rounded-full text-sm font-extrabold border-2 ${
+                    statusFilter === 'early' ? 'bg-orange-600 text-white border-orange-700' : 'bg-white text-gray-700 border-gray-300'
                   }`}
                 >
                   Early Out
@@ -404,7 +463,7 @@ const stats = useMemo(() => {
       </Card>
 
       {/* Content Area */}
-      <Card className="p-6">
+      <Card className="p-6 bg-white border-2 border-indigo-300 shadow-lg">
         {viewMode === 'present' ? (
           sortedAttendance.length > 0 ? (
             <div className="space-y-3">
@@ -445,10 +504,10 @@ const stats = useMemo(() => {
                   const primaryRecord = dayData.checkIns[0] || dayData.allRecords[0];
                   
                   return (
-                    <div key={index} className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-bold text-gray-900 text-lg">
+                      <div key={index} className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-indigo-300 hover:border-indigo-500 hover:shadow-lg transition-all">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="font-extrabold text-gray-900 text-lg">
                             {date.toLocaleDateString('en-US', {
                               weekday: 'long',
                               year: 'numeric',
@@ -539,20 +598,20 @@ const stats = useMemo(() => {
               })()}
             </div>
               ) : (
-            <div className="text-center py-16">
+              <div className="text-center py-16">
               <div className="text-6xl mb-4">✓</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">No Records Found</h3>
-              <p className="text-gray-600">No attendance records for the selected period</p>
+              <h3 className="text-2xl font-extrabold text-gray-900 mb-3">No Records Found</h3>
+              <p className="text-gray-700 font-semibold">No attendance records for the selected period</p>
             </div>
           )
         ) : (
           absentDays.length > 0 ? (
             <div className="space-y-3">
               {absentDays.map((date, index) => (
-                <div key={index} className="p-4 bg-red-50 rounded-lg border-2 border-red-200 hover:border-red-300 transition-all">
+                <div key={index} className="p-4 bg-gradient-to-r from-red-50 to-pink-50 rounded-lg border-2 border-red-300 hover:border-red-500 hover:shadow-lg transition-all">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <div className="font-bold text-gray-900 text-lg">
+                      <div className="font-extrabold text-gray-900 text-lg">
                         {date.toLocaleDateString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
@@ -560,20 +619,20 @@ const stats = useMemo(() => {
                           day: 'numeric'
                         })}
                       </div>
-                      <div className="text-sm text-gray-600 mt-1 font-medium">No attendance recorded</div>
+                      <div className="text-sm text-gray-700 mt-1 font-bold">No attendance recorded</div>
                     </div>
-                    <span className="px-4 py-2 rounded-full text-sm font-bold bg-red-100 text-red-800 border-2 border-red-300">
-                      Absent
+                    <span className="px-4 py-2 rounded-full text-sm font-extrabold bg-red-100 text-red-900 border-2 border-red-400">
+                      ❌ Absent
                     </span>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-16">
+              <div className="text-center py-16">
               <div className="text-6xl mb-4">🎉</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Perfect Attendance!</h3>
-              <p className="text-gray-600">No absent days for the selected period</p>
+              <h3 className="text-2xl font-extrabold text-gray-900 mb-3">Perfect Attendance!</h3>
+              <p className="text-gray-700 font-semibold">No absent days for the selected period</p>
             </div>
           )
         )}

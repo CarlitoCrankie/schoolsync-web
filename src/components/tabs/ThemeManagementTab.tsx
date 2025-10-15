@@ -121,29 +121,36 @@ export default function ThemeManagementTab({ companyId }) {
 
   if (loading) {
     return (
-      <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading schools...</p>
-      </div>
+      <Card className="p-12 card-glow">
+        <div className="flex flex-col items-center justify-center">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/20"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-primary absolute top-0 left-0"></div>
+          </div>
+          <p className="mt-6 text-lg font-medium text-white">🎨 Loading schools...</p>
+        </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">School Theme Management</h2>
-          <p className="text-gray-600 mt-1">Customize dashboard appearance for individual schools</p>
+      <Card className="p-6 card-dark-solid border-primary/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white">School Theme Management</h2>
+            <p className="text-muted-foreground mt-1">Customize dashboard appearance for individual schools</p>
+          </div>
+          <Palette className="h-8 w-8 text-primary" />
         </div>
-        <Palette className="h-8 w-8 text-indigo-600" />
-      </div>
+      </Card>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* School List */}
-        <Card className="lg:col-span-1 p-4">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
+        <Card className="lg:col-span-1 p-4 card-glow">
+          <h3 className="font-semibold mb-4 flex items-center gap-2 text-white">
             Schools
-            <Badge variant="outline">{schools.length}</Badge>
+            <Badge variant="outline" className="border-primary/50 text-primary">{schools.length}</Badge>
           </h3>
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {schools.map(school => (
@@ -151,18 +158,18 @@ export default function ThemeManagementTab({ companyId }) {
                 key={school.school_id}  
                 onClick={() => handleSchoolSelect(school)}
                 className={`w-full text-left p-3 rounded-lg border transition-all ${
-                  selectedSchool?.school_id === school.school_id  // ✅ Changed comparisons
-                    ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  selectedSchool?.school_id === school.school_id
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-primary/50 hover:bg-card/80'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900">{school.name}</p>
-                    <p className="text-xs text-gray-500">{school.location}</p>
+                    <p className="font-medium text-white">{school.name}</p>
+                    <p className="text-xs text-muted-foreground">{school.location}</p>
                   </div>
                   {school.has_theme && (
-                    <Badge className="bg-green-100 text-green-800">
+                    <Badge className="bg-green-500/20 text-green-400 border border-green-500/50">
                       <Check className="h-3 w-3 mr-1" />
                       Custom
                     </Badge>
@@ -174,13 +181,13 @@ export default function ThemeManagementTab({ companyId }) {
         </Card>
 
         {/* Theme Editor */}
-        <Card className="lg:col-span-2 p-6">
+        <Card className="lg:col-span-2 p-6 card-glow">
           {selectedSchool ? (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-semibold">{selectedSchool.name}</h3>
-                  <p className="text-sm text-gray-600">Configure custom theme</p>
+                  <h3 className="text-xl font-semibold text-white">{selectedSchool.name}</h3>
+                  <p className="text-sm text-muted-foreground">Configure custom theme</p>
                 </div>
                 <div className="flex gap-2">
                   <Button

@@ -297,8 +297,10 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   };
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center h-screen">
+return (
+      <div className="min-h-screen bg-animated-gradient">
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-grid-cyan opacity-10 pointer-events-none" />
         <Card className="p-6 text-center">
           <div className="text-red-600 text-4xl mb-2">⚠️</div>
           <p className="text-gray-600">User information not available</p>
@@ -312,7 +314,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="min-h-screen bg-animated-gradient">
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-grid-cyan opacity-10 pointer-events-none" />
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading dashboard...</p>
@@ -326,112 +330,125 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-animated-gradient">
+      {/* Grid Pattern */}
+      <div className="absolute inset-0 bg-grid-cyan opacity-10 pointer-events-none" />
       {/* Header */}
-    <header className="bg-white shadow-sm border-b sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Company/School Logo */}
-          
+      <header className="bg-gradient-to-r from-card to-card/80 shadow-lg border-b border-primary/20 sticky top-0 z-50 backdrop-blur-sm relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <img 
                 src={diamondLogo} 
                 alt="Logo"
                 className="w-10 h-10 object-contain rounded-lg"
               />
-            
-            
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {isCompanyAdmin ? 'Company Dashboard' : (user.school?.name || 'School Dashboard')}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {isCompanyAdmin 
-                  ? 'Diamond Attendance Network' 
-                  : 'School Administration'
-                }
-              </p>
+              <div>
+                <h1 className="text-2xl font-bold text-white">
+                  {isCompanyAdmin ? 'Company Dashboard' : (user.school?.name || 'School Dashboard')}
+                </h1>
+                <p className="text-sm text-primary font-medium">
+                  {isCompanyAdmin 
+                    ? 'Diamond Attendance Network' 
+                    : 'School Administration'
+                  }
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden md:block">
-              <p className="text-sm font-medium text-gray-900">{user.username || 'Admin'}</p>
-              <p className="text-xs text-gray-600 capitalize">{user.role?.replace('_', ' ')}</p>
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden md:block">
+                <p className="text-sm font-semibold text-white">{user.username || 'Admin'}</p>
+                <p className="text-xs text-primary capitalize">{user.role?.replace('_', ' ')}</p>
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  if (typeof onLogout === 'function') {
+                    onLogout();
+                  } else {
+                    localStorage.clear();
+                    window.location.href = '/login';
+                  }
+                }} 
+                size="sm"
+                className="border-primary/30 hover:bg-primary/10 hover:border-primary text-white"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
             </div>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                console.log('Logout clicked, onLogout type:', typeof onLogout);
-                if (typeof onLogout === 'function') {
-                  onLogout();
-                } else {
-                  console.error('onLogout is not a function!');
-                  localStorage.clear();
-                  window.location.href = '/login';
-                }
-              }} 
-              size="sm"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {isCompanyAdmin ? (
-            <>
-              <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-blue-600 font-medium">Schools Network</p>
-                    <p className="text-3xl font-bold text-blue-900 mt-2">{stats.total_schools}</p>
-                  </div>
-                  <SchoolIcon className="h-12 w-12 text-blue-600 opacity-50" />
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {isCompanyAdmin ? (
+          <>
+            <Card className="p-6 card-glow hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-400 font-bold mb-2">Schools Network</p>
+                  <p className="text-4xl font-extrabold text-white">{stats.total_schools}</p>
                 </div>
-              </Card>
-              
-              <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-green-600 font-medium">Total Students</p>
-                    <p className="text-3xl font-bold text-green-900 mt-2">{stats.total_students}</p>
-                  </div>
-                  <Users className="h-12 w-12 text-green-600 opacity-50" />
+                <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                  <SchoolIcon className="h-8 w-8 text-blue-400" />
                 </div>
-              </Card>
-              
-              <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-purple-600 font-medium">Active Sync Agents</p>
-                    <p className="text-3xl font-bold text-purple-900 mt-2">
-                      {stats.active_sync_agents}/{stats.total_sync_agents}
-                    </p>
-                  </div>
-                  <Activity className="h-12 w-12 text-purple-600 opacity-50" />
+              </div>
+            </Card>
+            
+            <Card className="p-6 card-glow hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-400 font-bold mb-2">Total Students</p>
+                  <p className="text-4xl font-extrabold text-white">{stats.total_students}</p>
                 </div>
-              </Card>
-              
-              <Card className={`p-6 bg-gradient-to-br ${
-                stats.system_health === 'healthy' ? 'from-green-50 to-green-100 border-green-200' : 
-                stats.system_health === 'degraded' ? 'from-yellow-50 to-yellow-100 border-yellow-200' : 
-                'from-red-50 to-red-100 border-red-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">System Health</p>
-                    <p className="text-3xl font-bold mt-2 capitalize">{stats.system_health}</p>
-                  </div>
-                  <TrendingUp className="h-12 w-12 opacity-50" />
+                <div className="w-16 h-16 rounded-2xl bg-green-500/20 flex items-center justify-center">
+                  <Users className="h-8 w-8 text-green-400" />
                 </div>
-              </Card>
-            </>
-          ) : (
+              </div>
+            </Card>
+            
+            <Card className="p-6 card-glow hover:scale-105 transition-transform">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-purple-400 font-bold mb-2">Active Sync Agents</p>
+                  <p className="text-4xl font-extrabold text-white">
+                    {stats.active_sync_agents}/{stats.total_sync_agents}
+                  </p>
+                </div>
+                <div className="w-16 h-16 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+                  <Activity className="h-8 w-8 text-purple-400" />
+                </div>
+              </div>
+            </Card>
+            
+            <Card className={`p-6 card-glow hover:scale-105 transition-transform`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold mb-2" style={{
+                    color: stats.system_health === 'healthy' ? '#4ade80' : 
+                          stats.system_health === 'degraded' ? '#fbbf24' : '#f87171'
+                  }}>System Health</p>
+                  <p className="text-4xl font-extrabold text-white capitalize">{stats.system_health}</p>
+                </div>
+                <div 
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                  style={{
+                    backgroundColor: stats.system_health === 'healthy' ? '#4ade8020' : 
+                                    stats.system_health === 'degraded' ? '#fbbf2420' : '#f8717120'
+                  }}
+                >
+                  <TrendingUp className="h-8 w-8" style={{
+                    color: stats.system_health === 'healthy' ? '#4ade80' : 
+                          stats.system_health === 'degraded' ? '#fbbf24' : '#f87171'
+                  }} />
+                </div>
+              </div>
+            </Card>
+          </>
+        ) : (
             <>
               <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
                 <div className="flex items-center justify-between">
@@ -485,18 +502,18 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         </div>
 
         {/* Navigation Tabs */}
-        <Card className="mb-8">
+        <Card className="mb-8 card-dark-solid">
           {/* Desktop Navigation */}
-          <div className="hidden md:block border-b">
+          <div className="hidden md:block border-b border-primary/20">
             <nav className="flex space-x-8 px-6">
               {availableTabs.map(tab => (
                 <button 
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  className={`py-4 px-1 border-b-2 font-semibold text-sm transition-colors ${
                     activeTab === tab.id 
-                      ? 'border-indigo-500 text-indigo-600' 
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-primary text-primary' 
+                      : 'border-transparent text-muted-foreground hover:text-white'
                   }`}
                 >
                   <span className="mr-2">{tab.icon}</span>
@@ -505,7 +522,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
               ))}
             </nav>
           </div>
-
+          
           {/* Mobile Navigation */}
           <div className="md:hidden border-b">
             <div className="px-4 py-3">
