@@ -723,7 +723,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
           <Card className="w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto border-4 border-indigo-300 shadow-2xl">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-indigo-200">
-                <h4 className="text-2xl font-bold text-gray-900">
+                <h4 className="text-2xl font-bold text-accent-900">
                   {modalType === 'add' && '➕ Add New Student'}
                   {modalType === 'edit' && '✏️ Edit Student'}
                   {modalType === 'delete' && '🗑️ Delete Student'}
@@ -741,8 +741,8 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
               {(modalType === 'add' || modalType === 'edit') && (
                 <form onSubmit={handleSave} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      👤 Student Name *
+                    <label className="block text-sm font-bold text-red-700 mb-2">
+                      👤 Student Name
                     </label>
                     <input
                       type="text"
@@ -755,7 +755,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-red-700 mb-2">
                       📚 Grade
                     </label>
                     <input
@@ -768,7 +768,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-red-700 mb-2">
                       🆔 Student Code
                     </label>
                     <input
@@ -782,7 +782,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
 
                   {/* Password field */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-red-700 mb-2">
                       🔐 Parent Password
                     </label>
                     <div className="relative">
@@ -810,7 +810,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
 
                   {/* Email field with Remove checkbox */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-red-700 mb-2">
                       📧 Parent Email
                     </label>
                     <input
@@ -856,7 +856,7 @@ const loadStudents = async (page = 1, limit = pageSize, searchTerm = '', gradeFi
 
                   {/* Phone field with Remove checkbox */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-red-700 mb-2">
                       📱 Parent Phone
                     </label>
                     <input
