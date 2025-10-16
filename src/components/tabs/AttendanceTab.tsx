@@ -955,7 +955,7 @@ if (!gradeFilter) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Enter student name or student code..."
-                className="w-full px-4 py-2 border-2 border-purple-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-2 text-gray-700 border-2 border-purple-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 onKeyPress={(e) => e.key === 'Enter' && searchStudent()}
               />
             </div>
