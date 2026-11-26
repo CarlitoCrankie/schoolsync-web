@@ -2,8 +2,9 @@
 
 import { createContext, useContext } from "react";
 import { CalendarDays, Home, Phone, UserRound, UserRoundPlus } from "lucide-react";
+import { BiometricLoader } from "@/components/brand/Biometric";
 import { PortalShell, type PortalTab } from "@/components/app/PortalShell";
-import { PageSkeleton, ToastProvider } from "@/components/app/ui";
+import { ToastProvider } from "@/components/app/ui";
 import { findInstitution, type Institution } from "@/features/auth/data";
 import { lastSchoolDay, peopleFor, settingsFor, type Person, type Rules } from "@/features/demo/data";
 import { useNow, useSession } from "@/features/session/session";
@@ -42,11 +43,7 @@ export function PortalLayout({ role, children }: { role: "parent" | "staff"; chi
 
   if (!session || !inst || !now) {
     return (
-      <div className="min-h-screen bg-surface p-6">
-        <div className="mx-auto max-w-3xl">
-          <PageSkeleton />
-        </div>
-      </div>
+      <BiometricLoader label={role === "parent" ? "Checking today\u2019s attendance" : "Loading your record"} />
     );
   }
 

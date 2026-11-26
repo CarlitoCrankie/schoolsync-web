@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 import { BarChart3, ClipboardList, Fingerprint, LayoutGrid, Settings as SettingsIcon, Upload, Users } from "lucide-react";
+import { BiometricLoader } from "@/components/brand/Biometric";
 import { AppShell, type NavItem } from "@/components/app/AppShell";
-import { PageSkeleton, ToastProvider } from "@/components/app/ui";
+import { ToastProvider } from "@/components/app/ui";
 import { InstitutionMark } from "@/features/auth/ui";
 import { findInstitution, type Institution } from "@/features/auth/data";
 import { dayFor, devicesFor, lastSchoolDay, peopleFor, settingsFor, type Person, type Settings } from "@/features/demo/data";
@@ -38,9 +39,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   if (!session || !inst || !now) {
     return (
-      <div className="min-h-screen bg-surface p-8">
-        <PageSkeleton />
-      </div>
+      <BiometricLoader label="Opening your dashboard" />
     );
   }
   return (

@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useState } from "react";
 import { Building2, Fingerprint, LayoutGrid, ShieldCheck } from "lucide-react";
+import { BiometricLoader } from "@/components/brand/Biometric";
 import { AppShell, type NavItem } from "@/components/app/AppShell";
-import { PageSkeleton, ToastProvider } from "@/components/app/ui";
+import { ToastProvider } from "@/components/app/ui";
 import { institutions as seed, type Institution } from "@/features/auth/data";
 import { devicesFor } from "@/features/demo/data";
 import { useNow, useSession, type Session } from "@/features/session/session";
@@ -42,9 +43,7 @@ export function ConsoleLayout({ children }: { children: React.ReactNode }) {
 
   if (!session || !now) {
     return (
-      <div className="min-h-screen bg-surface p-8">
-        <PageSkeleton />
-      </div>
+      <BiometricLoader label="Opening the console" />
     );
   }
 

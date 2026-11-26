@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/hanken-grotesk";
 import "@fontsource-variable/jetbrains-mono";
+import { AppSplash } from "@/components/brand/Biometric";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { themeScript } from "@/components/theme/theme-script";
 import "./globals.css";
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="font-sans">
+        <AppSplash />
         <MotionProvider>{children}</MotionProvider>
       </body>
     </html>
