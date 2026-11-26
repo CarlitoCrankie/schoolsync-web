@@ -40,9 +40,12 @@ export function PortalShell({
   return (
     <div className="min-h-screen bg-surface pb-24 md:pb-10" data-brand style={{ ["--brand" as string]: inst.brand.primary }}>
       {/* Brand header */}
-      <header className="relative overflow-hidden text-white" style={{ background: `linear-gradient(135deg, var(--brand-strong), color-mix(in oklab, var(--brand-strong) 70%, ${inst.brand.secondary}))` }}>
-        <div aria-hidden className="bg-grid-dark absolute inset-0 opacity-60" />
-        <motion.div aria-hidden className="absolute -right-16 -top-20 h-56 w-56 rounded-full blur-3xl" style={{ background: inst.brand.secondary, opacity: 0.35 }} animate={{ x: [0, -30, 0], y: [0, 20, 0] }} transition={{ duration: 14, repeat: Infinity }} />
+      <header className="relative z-40 text-white" style={{ background: `linear-gradient(135deg, var(--brand-strong), color-mix(in oklab, var(--brand-strong) 70%, ${inst.brand.secondary}))` }}>
+        {/* Decorative layers are clipped here, not on the header, so the account menu can drop below it. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="bg-grid-dark absolute inset-0 opacity-60" />
+          <motion.div className="absolute -right-16 -top-20 h-56 w-56 rounded-full blur-3xl" style={{ background: inst.brand.secondary, opacity: 0.35 }} animate={{ x: [0, -30, 0], y: [0, 20, 0] }} transition={{ duration: 14, repeat: Infinity }} />
+        </div>
         <div className="relative mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <InstitutionMark inst={inst} size={36} className="ring-white/30" />
@@ -53,6 +56,10 @@ export function PortalShell({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle className="border-white/25 bg-white/10 text-white hover:text-white" />
+            <button type="button" onClick={onSignOut} className="flex h-9 items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-2.5 text-xs font-semibold text-white transition hover:bg-white/20" aria-label="Sign out">
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
             <div className="relative">
               <button type="button" onClick={() => setMenu((m) => !m)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-xs font-bold ring-1 ring-white/30" aria-label="Account menu">
                 {person.initials}
