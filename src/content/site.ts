@@ -139,7 +139,7 @@ export const testimonials = [
     name: "Client name",
     role: "Operations Director, Logistics company",
     initials: "OD",
-    tone: "bg-blue-100 text-brand-blue",
+    tone: "bg-blue-100 text-brand-blue dark:bg-blue-500/20 dark:text-blue-300",
   },
   {
     quote:
@@ -147,7 +147,7 @@ export const testimonials = [
     name: "Client name",
     role: "Bursar, Private school",
     initials: "BS",
-    tone: "bg-emerald-100 text-emerald-700",
+    tone: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
   },
   {
     quote:
@@ -155,7 +155,7 @@ export const testimonials = [
     name: "Client name",
     role: "Headteacher, Basic school",
     initials: "HT",
-    tone: "bg-indigo-100 text-indigo-700",
+    tone: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300",
   },
 ] as const;
 

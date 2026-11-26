@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 type Status = "idle" | "sending" | "sent" | "error";
 
 const field =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-blue-100";
-const label = "mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-600";
+  "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-sm text-heading placeholder:text-faint outline-none transition focus:border-accent focus:ring-2 focus:ring-blue-100";
+const label = "mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-body";
 
 export function Contact() {
   const [status, setStatus] = useState<Status>("idle");
@@ -36,7 +36,7 @@ export function Contact() {
   }
 
   return (
-    <section id="contact" className="relative overflow-hidden border-b border-slate-200/70 bg-white py-24">
+    <section id="contact" className="relative overflow-hidden border-b border-line/70 bg-card py-24">
       <div aria-hidden className="bg-grid mask-radial absolute inset-0 opacity-60" />
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeading
@@ -70,38 +70,38 @@ export function Contact() {
             </Reveal>
 
             <Reveal delay={0.08}>
-              <div className="rounded-2xl border border-slate-200/80 bg-[#f8fafc] p-6">
+              <div className="rounded-2xl border border-line/80 bg-surface-2 p-6">
                 <div className="mb-4 flex items-start gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-brand-blue">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-500/20 text-accent">
                     <Phone className="h-4 w-4" />
                   </span>
                   <div>
-                    <h3 className="text-sm font-bold text-brand-navy">Call us</h3>
-                    <p className="text-[11px] text-slate-500">{contact.hours}</p>
+                    <h3 className="text-sm font-bold text-heading">Call us</h3>
+                    <p className="text-[11px] text-muted">{contact.hours}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <a href={contact.phoneMainHref} className="rounded-xl border border-slate-200/70 bg-white p-3 transition-colors hover:border-brand-blue">
-                    <span className="block text-[10px] font-medium text-slate-400">Office line</span>
-                    <span className="mt-0.5 block font-mono text-xs font-bold text-brand-navy">{contact.phoneMain}</span>
+                  <a href={contact.phoneMainHref} className="rounded-xl border border-line/70 bg-card p-3 transition-colors hover:border-accent">
+                    <span className="block text-[10px] font-medium text-faint">Office line</span>
+                    <span className="mt-0.5 block font-mono text-xs font-bold text-heading">{contact.phoneMain}</span>
                   </a>
-                  <a href={contact.phoneMobileHref} className="rounded-xl border border-slate-200/70 bg-white p-3 transition-colors hover:border-brand-blue">
-                    <span className="block text-[10px] font-medium text-slate-400">Mobile</span>
-                    <span className="mt-0.5 block font-mono text-xs font-bold text-brand-navy">{contact.phoneMobile}</span>
+                  <a href={contact.phoneMobileHref} className="rounded-xl border border-line/70 bg-card p-3 transition-colors hover:border-accent">
+                    <span className="block text-[10px] font-medium text-faint">Mobile</span>
+                    <span className="mt-0.5 block font-mono text-xs font-bold text-heading">{contact.phoneMobile}</span>
                   </a>
                 </div>
               </div>
             </Reveal>
 
             <Reveal delay={0.16}>
-              <div className="rounded-2xl border border-slate-200/80 bg-[#f8fafc] p-6">
+              <div className="rounded-2xl border border-line/80 bg-surface-2 p-6">
                 <div className="mb-4 flex items-start gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-brand-blue">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-500/20 text-accent">
                     <Mail className="h-4 w-4" />
                   </span>
                   <div>
-                    <h3 className="text-sm font-bold text-brand-navy">Email</h3>
-                    <p className="text-[11px] text-slate-500">Proposals, tenders and official requests</p>
+                    <h3 className="text-sm font-bold text-heading">Email</h3>
+                    <p className="text-[11px] text-muted">Proposals, tenders and official requests</p>
                   </div>
                 </div>
                 <div className="space-y-2.5">
@@ -109,7 +109,7 @@ export function Contact() {
                     <a
                       key={m}
                       href={`mailto:${m}`}
-                      className="block rounded-xl border border-slate-200/70 bg-white px-3.5 py-2.5 font-mono text-xs font-medium text-brand-navy transition-colors hover:border-brand-blue"
+                      className="block rounded-xl border border-line/70 bg-card px-3.5 py-2.5 font-mono text-xs font-medium text-heading transition-colors hover:border-accent"
                     >
                       {m}
                     </a>
@@ -120,12 +120,12 @@ export function Contact() {
           </div>
 
           <Reveal delay={0.1} className="lg:col-span-7">
-            <div className="rounded-2xl border border-slate-200/90 bg-[#f8fafc] p-6 shadow-card sm:p-8">
-              <span className="mb-3 inline-block rounded-md bg-blue-100/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-brand-blue">
+            <div className="rounded-2xl border border-line/90 bg-surface-2 p-6 shadow-card sm:p-8">
+              <span className="mb-3 inline-block rounded-md bg-blue-100/80 dark:bg-blue-500/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-accent">
                 Free assessment
               </span>
-              <h3 className="font-display text-xl font-bold text-brand-navy sm:text-2xl">Request a free site assessment</h3>
-              <p className="mt-1.5 text-sm text-slate-600">
+              <h3 className="font-display text-xl font-bold text-heading sm:text-2xl">Request a free site assessment</h3>
+              <p className="mt-1.5 text-sm text-body">
                 Tell us about your institution and we&apos;ll get back to you with a recommended set-up and quote.
               </p>
 
@@ -178,7 +178,7 @@ export function Contact() {
                 <button
                   type="submit"
                   disabled={status === "sending"}
-                  className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-brand-blue disabled:opacity-70"
+                  className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-primary-hover disabled:opacity-70"
                 >
                   {status === "sending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />}
                   {status === "sending" ? "Sending…" : "Request free site assessment"}
@@ -193,7 +193,7 @@ export function Contact() {
                       role="status"
                       className={cn(
                         "flex items-center gap-2 rounded-xl border p-3.5 text-xs font-medium",
-                        status === "sent" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700",
+                        status === "sent" ? "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300" : "border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300",
                       )}
                     >
                       {status === "sent" && <CheckCircle2 className="h-4 w-4" />}

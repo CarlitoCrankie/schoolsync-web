@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 /** NOTE: content is placeholder until real, consented client quotes are supplied. */
 export function Testimonials() {
   return (
-    <section className="border-b border-slate-200/70 bg-[#f8fafc] py-24">
+    <section className="border-b border-line/70 bg-surface-2 py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeading
           className="mb-14"
@@ -26,17 +26,17 @@ export function Testimonials() {
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: i * 0.12 }}
               whileHover={{ y: -4 }}
-              className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-6 shadow-card"
+              className="flex flex-col justify-between rounded-2xl border border-line/80 bg-card p-6 shadow-card"
             >
               <div>
                 <Quote className="mb-4 h-6 w-6 text-blue-200" />
-                <p className="text-sm italic leading-relaxed text-slate-600">&ldquo;{t.quote}&rdquo;</p>
+                <p className="text-sm italic leading-relaxed text-body">&ldquo;{t.quote}&rdquo;</p>
               </div>
-              <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex items-center gap-3 border-t border-line pt-4">
                 <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold", t.tone)}>{t.initials}</span>
                 <div>
-                  <p className="text-xs font-bold text-brand-navy">{t.name}</p>
-                  <p className="text-[11px] text-slate-500">{t.role}</p>
+                  <p className="text-xs font-bold text-heading">{t.name}</p>
+                  <p className="text-[11px] text-muted">{t.role}</p>
                 </div>
               </div>
             </motion.article>

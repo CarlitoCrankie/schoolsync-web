@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const toneClass: Record<string, string> = {
-  blue: "bg-blue-50 text-brand-blue",
-  cyan: "bg-cyan-50 text-cyan-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-  indigo: "bg-indigo-50 text-indigo-600",
+  blue: "bg-blue-50 dark:bg-blue-500/15 text-accent",
+  cyan: "bg-cyan-50 dark:bg-cyan-500/15 text-cyan-600",
+  emerald: "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600",
+  indigo: "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600",
 };
 
 export function Hero() {
@@ -27,7 +27,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease }}
-            className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/80 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue shadow-sm backdrop-blur"
+            className="inline-flex items-center gap-2 rounded-full border border-blue-100 dark:border-blue-500/25 bg-card/80 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-accent shadow-sm backdrop-blur"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-brand-cyan" />
             Biometric attendance · Schools & workplaces
@@ -38,7 +38,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.08, ease }}
-            className="mt-6 font-display text-4xl font-extrabold leading-[1.08] tracking-tight text-brand-navy sm:text-5xl lg:text-[58px]"
+            className="mt-6 font-display text-4xl font-extrabold leading-[1.08] tracking-tight text-heading sm:text-5xl lg:text-[58px]"
           >
             Attendance for schools,{" "}
             <span className="text-gradient animate-shimmer">workplaces & campuses</span>
@@ -48,7 +48,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.16, ease }}
-            className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg"
+            className="mt-5 max-w-xl text-base leading-relaxed text-body sm:text-lg"
           >
             On-site biometric check-in at the gate, instant SMS alerts to parents, and a live dashboard branded for your
             institution. Choose a set-up that fits your people and your facility.
@@ -62,16 +62,16 @@ export function Hero() {
           >
             <a
               href="#contact"
-              className="group inline-flex items-center gap-2.5 rounded-xl bg-brand-navy px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition-all hover:-translate-y-0.5 hover:bg-brand-blue hover:shadow-xl"
+              className="group inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition-all hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-xl"
             >
               Book a free site survey
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </a>
             <a
               href={contact.phoneMainHref}
-              className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white/80 px-6 py-3.5 font-mono text-sm font-semibold text-brand-navy shadow-sm backdrop-blur transition-all hover:border-slate-300 hover:bg-white"
+              className="inline-flex items-center gap-2.5 rounded-xl border border-line bg-card/80 px-6 py-3.5 font-mono text-sm font-semibold text-heading shadow-sm backdrop-blur transition-all hover:border-line-strong hover:bg-card"
             >
-              <Phone className="h-4 w-4 text-brand-blue" />
+              <Phone className="h-4 w-4 text-accent" />
               {contact.phoneMain}
             </a>
           </motion.div>
@@ -98,14 +98,14 @@ export function Hero() {
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: 0.1 * i, ease }}
               whileHover={{ y: -4 }}
-              className="flex items-start gap-3.5 rounded-2xl border border-slate-200/80 bg-white/80 p-5 shadow-card backdrop-blur"
+              className="flex items-start gap-3.5 rounded-2xl border border-line/80 bg-card/80 p-5 shadow-card backdrop-blur"
             >
               <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", toneClass[h.tone])}>
                 <Icon className="h-5 w-5" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-brand-navy">{h.title}</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-500">{h.body}</p>
+                <h3 className="text-sm font-bold text-heading">{h.title}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted">{h.body}</p>
               </div>
             </motion.div>
           );

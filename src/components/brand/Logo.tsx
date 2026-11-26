@@ -8,10 +8,10 @@ export function Logo({ className, dark = false }: { className?: string; dark?: b
         <Fingerprint className="h-5 w-5" strokeWidth={2} />
       </span>
       <span className="leading-tight">
-        <span className={cn("block font-display text-[15px] font-bold tracking-tight", dark ? "text-white" : "text-brand-navy")}>
+        <span className={cn("block font-display text-[15px] font-bold tracking-tight", dark ? "text-white" : "text-heading")}>
           Diamond Attendance
         </span>
-        <span className={cn("hidden text-[9px] font-semibold sm:block uppercase tracking-[0.18em]", dark ? "text-slate-400" : "text-slate-400")}>
+        <span className={cn("hidden text-[9px] font-semibold sm:block uppercase tracking-[0.18em]", dark ? "text-faint" : "text-faint")}>
           Biometric Infrastructure
         </span>
       </span>
