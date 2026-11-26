@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { homeFor, saveSession } from "@/features/session/session";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
@@ -212,9 +213,10 @@ export function SignInFlow() {
                     onChange={() => (returning ? switchAccount() : go("role"))}
                     onSwitch={switchAccount}
                     onForgot={() => go("forgot")}
-                    onSuccess={(name, mustChange, remember) => {
+                    onSuccess={(name, identifier, mustChange, remember) => {
                       setExpired(false);
                       setDisplayName(name);
+                      saveSession({ kind: "institution", institutionId: inst.id, role, identifier, name });
                       if (remember) saveRemembered({ institutionId: inst.id, role });
                       else clearRemembered();
                       go(mustChange ? "set-password" : "done");
@@ -348,7 +350,7 @@ function CredentialsStep({
   onChange: () => void;
   onSwitch: () => void;
   onForgot: () => void;
-  onSuccess: (name: string, mustChange: boolean, remember: boolean) => void;
+  onSuccess: (name: string, identifier: string, mustChange: boolean, remember: boolean) => void;
 }) {
   const cfg = roles[role];
   const [identifier, setIdentifier] = useState("");
@@ -374,7 +376,7 @@ function CredentialsStep({
     const res = await signIn({ institutionId: inst.id, role, identifier, password });
     setLoading(false);
     setNow(Date.now());
-    if (res.ok) onSuccess(res.displayName, res.mustChangePassword, remember);
+    if (res.ok) onSuccess(res.displayName, identifier.trim(), res.mustChangePassword, remember);
     else {
       setError(res);
       setPassword("");
@@ -580,7 +582,12 @@ function ForgotStep({ inst, role, onBack }: { inst: Institution; role: Role; onB
   );
 }
 
-function DoneStep({ inst, role, name, onSignOut }: { inst: Institution; role: Role; name: string; onSignOut: () => void }) {
+function DoneStep({ inst, role, name }: { inst: Institution; role: Role; name: string; onSignOut?: () => void }) {
+  const router = useRouter();
+  useEffect(() => {
+    const t = setTimeout(() => router.push(homeFor(role)), 1100);
+    return () => clearTimeout(t);
+  }, [role, router]);
   return (
     <div className="py-4 text-center">
       <motion.div
@@ -597,13 +604,10 @@ function DoneStep({ inst, role, name, onSignOut }: { inst: Institution; role: Ro
       <p className="mt-1 text-[13.5px] text-muted">
         {name} · {roles[role].title} · {inst.name}
       </p>
-      <p className="mx-auto mt-4 max-w-xs rounded-xl bg-card-muted px-4 py-3 text-[12.5px] text-body">
-        The {roles[role].title.toLowerCase()} dashboard is the next part of the build. You&apos;ll land there automatically once it&apos;s ready.
-      </p>
-      <div className="mt-5 flex gap-2">
-        <Link href="/" className="flex-1 rounded-xl border border-line py-2.5 text-[13px] font-semibold text-body hover:bg-card-muted">Home</Link>
-        <button type="button" onClick={onSignOut} className="flex-1 rounded-xl border border-line py-2.5 text-[13px] font-semibold text-body hover:bg-card-muted">Sign out</button>
+      <div className="mx-auto mt-5 h-1 w-40 overflow-hidden rounded-full bg-subtle">
+        <motion.div className="h-full rounded-full" style={{ background: "var(--brand-fg)" }} initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 1.05, ease: "easeInOut" }} />
       </div>
+      <p className="mt-2 text-[12px] text-muted">Opening your dashboard…</p>
     </div>
   );
 }
@@ -637,7 +641,8 @@ function PreviewNote() {
             <div className="mt-2 rounded-xl border border-dashed border-line px-4 py-3 text-left text-[11.5px] leading-relaxed text-muted">
               Password <code className="font-mono text-heading">demo1234</code> signs in with any ID. Staff/admin IDs starting with{" "}
               <code className="font-mono text-heading">NEW</code> show first-time password setup. ID <code className="font-mono text-heading">INACTIVE</code> shows a deactivated
-              account. Five wrong passwords pause sign-in for 15 minutes. Add <code className="font-mono text-heading">?reason=expired</code> to the URL to see the session-expired notice.
+              account. Five wrong passwords pause sign-in for 15 minutes. Add <code className="font-mono text-heading">?reason=expired</code> to the URL to see the session-expired notice. After sign-in you land on your dashboard; as a parent of the demo schools, try a student ID like{" "}
+              <code className="font-mono text-heading">DS-2024-0001</code>.
             </div>
           </motion.div>
         )}
