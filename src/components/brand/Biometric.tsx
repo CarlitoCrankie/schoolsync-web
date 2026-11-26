@@ -77,27 +77,40 @@ export function BiometricLoader({ label = "Loading", sub, fullScreen = true, ton
   );
 }
 
-/** Decides before first paint whether the splash plays: once per browser session, never on the marketing home page. */
-const splashScript = `(function(){try{var h=location.hostname,p=location.pathname;if((p==='/'&&h.indexOf('console.')!==0)||sessionStorage.getItem('da:splash')){document.documentElement.setAttribute('data-splash','off');}else{sessionStorage.setItem('da:splash','1');}}catch(e){document.documentElement.setAttribute('data-splash','off');}})();`;
+/**
+ * Runs before first paint. First full load of the session gets the branded
+ * splash; later full loads only show it if loading drags past 0.5s. Either
+ * way it stays until the window "load" event (page, fonts, scripts), with a
+ * short minimum on the first visit so the scan reads, and a 15s safety net.
+ */
+const splashScript = `(function(){var d=document.documentElement,seen=false;try{seen=!!sessionStorage.getItem('da:splash');sessionStorage.setItem('da:splash','1');}catch(e){}d.setAttribute('data-splash',seen?'quick':'full');var t0=Date.now(),min=seen?0:1100;function done(){setTimeout(function(){d.setAttribute('data-splash-state','done');},Math.max(0,min-(Date.now()-t0)));}if(document.readyState==='complete'){done();}else{window.addEventListener('load',done);}setTimeout(function(){d.setAttribute('data-splash-state','done');},15000);})();`;
 
 /**
- * Opening splash: the fingerprint scans, verifies and fades into the app.
- * Server-rendered and CSS-driven, so it covers the page from the first paint
- * and removes itself (visibility: hidden) after ~2 seconds without any JS.
+ * Site-wide loading splash: the fingerprint scans until the page is ready,
+ * then verifies and fades into the site. Server-rendered and CSS-driven so it
+ * covers the page from the very first paint, even on a slow connection.
  */
 export function AppSplash() {
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: splashScript }} />
-      <div id="da-splash" aria-hidden className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-[#071634] text-sky-300">
+      <noscript>
+        <style>{"#da-splash{display:none}"}</style>
+      </noscript>
+      <div id="da-splash" role="status" aria-label="Loading Diamond Attendance" className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-[#071634] text-sky-300">
         <div className="bg-grid-dark absolute inset-0 opacity-50" />
         <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-blue/40 blur-3xl" />
         <FingerprintScanner size={128} check className="relative" />
-        <div className="bio-word relative mt-8 text-center">
+        <div className="bio-word relative mt-10 text-center">
           <p className="font-display text-2xl font-bold tracking-tight text-white">Diamond Attendance</p>
-          <div className="mt-2 grid font-mono text-[11px] uppercase tracking-[0.22em]">
-            <span className="bio-status-scan col-start-1 row-start-1 text-sky-300/80">Scanning</span>
-            <span className="bio-status-ok col-start-1 row-start-1 text-emerald-300">Verified</span>
+          <p className="mt-1 text-xs text-sky-200/70">Biometric attendance for schools &amp; workplaces</p>
+          <div className="mt-3 grid font-mono text-[11px] uppercase tracking-[0.22em]">
+            <span className="bio-status-scan col-start-1 row-start-1 flex justify-center text-sky-300/80">
+              Loading<span className="bio-dot">.</span>
+              <span className="bio-dot" style={{ animationDelay: "0.15s" }}>.</span>
+              <span className="bio-dot" style={{ animationDelay: "0.3s" }}>.</span>
+            </span>
+            <span className="bio-status-ok col-start-1 row-start-1 text-emerald-300">Ready</span>
           </div>
         </div>
       </div>

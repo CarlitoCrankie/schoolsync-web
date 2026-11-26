@@ -228,17 +228,27 @@ body {
   50% { opacity: 1; transform: translateY(-2px); }
 }
 
-/* Splash: one pass of draw → scan → verified → fade (≈2.1s). */
-#da-splash { animation: bio-splash-out 0.5s ease 1.75s forwards; }
-#da-splash .bio-ridge { animation: bio-draw-once 1.05s cubic-bezier(0.6, 0.05, 0.3, 1) forwards; }
-#da-splash .bio-beam { animation: bio-beam 0.55s ease-in-out 2 alternate, bio-hide 0.2s ease 1.1s forwards; }
-#da-splash .bio-frame { animation: bio-verify 0.35s ease 1.15s forwards; }
-#da-splash .bio-check { opacity: 0; transform: scale(0.4); animation: bio-pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) 1.2s forwards; }
-#da-splash .bio-status-scan { animation: bio-hide 0.15s ease 1.15s forwards; }
-#da-splash .bio-status-ok { opacity: 0; animation: bio-show 0.25s ease 1.2s forwards; }
-#da-splash .bio-word { opacity: 0; animation: bio-rise 0.5s ease 0.25s forwards; }
-#da-splash .bio-ring { animation-iteration-count: 1; }
+/* Splash = first-load screen. It scans until the page has loaded
+   (html[data-splash-state="done"] is set by the inline script), then verifies and fades.
+   data-splash="full": first visit this session, branded intro.
+   data-splash="quick": later full page loads, only appears if loading takes over 0.5s. */
+#da-splash .bio-word { opacity: 0; animation: bio-rise 0.5s ease 0.2s forwards; }
+#da-splash .bio-status-ok { opacity: 0; }
 html[data-splash="off"] #da-splash { display: none; }
+html[data-splash="quick"] #da-splash { opacity: 0; animation: bio-show 0.3s ease 0.5s forwards; }
+html[data-splash="quick"] #da-splash .bio-word { animation-delay: 0.5s; }
+
+html[data-splash-state="done"] #da-splash { animation: bio-splash-out 0.45s ease 0.6s forwards; }
+html[data-splash-state="done"] #da-splash .bio-beam,
+html[data-splash-state="done"] #da-splash .bio-ring { animation: bio-hide 0.2s ease forwards; }
+html[data-splash-state="done"] #da-splash .bio-ridge { animation: bio-draw-once 0.3s ease forwards; }
+html[data-splash-state="done"] #da-splash .bio-frame { animation: bio-verify 0.3s ease forwards; }
+html[data-splash-state="done"] #da-splash .bio-check { animation: bio-pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) 0.05s forwards; }
+html[data-splash-state="done"] #da-splash .bio-status-scan { animation: bio-hide 0.15s ease forwards; }
+html[data-splash-state="done"] #da-splash .bio-status-ok { animation: bio-show 0.25s ease 0.05s forwards; }
+/* A quick reload that never became visible just disappears. */
+html[data-splash="quick"][data-splash-state="done"] #da-splash { animation: bio-splash-out 0.2s ease forwards; }
+#da-splash .bio-check { opacity: 0; transform: scale(0.4); }
 @keyframes bio-draw-once {
   from { stroke-dashoffset: 1; opacity: 0.35; }
   to { stroke-dashoffset: 0; opacity: 1; }
@@ -260,6 +270,5 @@ html[data-splash="off"] #da-splash { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .bio-ridge, #da-splash .bio-ridge { animation: none; stroke-dashoffset: 0; }
   .bio-beam, .bio-ring { display: none; }
-  #da-splash { animation-delay: 0.6s; }
-  #da-splash .bio-frame, #da-splash .bio-check, #da-splash .bio-status-ok, #da-splash .bio-status-scan, #da-splash .bio-word { animation-duration: 0.01s; animation-delay: 0s; }
+  #da-splash .bio-frame, #da-splash .bio-check, #da-splash .bio-status-ok, #da-splash .bio-status-scan, #da-splash .bio-word { animation-duration: 0.01s !important; animation-delay: 0s !important; }
 }
